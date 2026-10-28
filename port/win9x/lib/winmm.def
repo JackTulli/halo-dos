@@ -1,0 +1,34 @@
+; WINMM.DEF
+;
+; The functions the Windows 98 SE / Me build may import from WINMM.dll:
+; the import library is made from this list (llvm-dlltool -k), and
+; tools/win9x_check.py fails a linked image that imports anything else.
+;
+; Each name here is exported and implemented by the WINMM of Windows 98
+; Second Edition and of Windows Me (multimedia timers, joystick, waveOut):
+; Windows 95 functions, ANSI versions only.
+
+LIBRARY WINMM.dll
+EXPORTS
+joyGetDevCapsA@12
+joyGetNumDevs@0
+joyGetPos@8
+joyGetPosEx@8
+timeBeginPeriod@4
+timeEndPeriod@4
+timeGetDevCaps@8
+timeGetTime@0
+timeKillEvent@4
+timeSetEvent@20
+waveOutClose@4
+waveOutGetDevCapsA@12
+waveOutGetNumDevs@0
+waveOutGetPosition@12
+waveOutOpen@24
+waveOutPause@4
+waveOutPrepareHeader@12
+waveOutReset@4
+waveOutRestart@4
+waveOutSetVolume@8
+waveOutUnprepareHeader@12
+waveOutWrite@12

@@ -1,0 +1,783 @@
+Halo CE 1.10 message deltas, from haloceded.exe 01.00.10.0621 (static)
+==============================================================================
+
+Global parameters (0x5AB35C):
+  locality_bits_full         25
+  locality_bits_delta        9
+  locality_delta_cutoff      8.0
+  locality_min_move          0.009999999776482582
+  locality_bits_lan          31
+  item_bits_x                20
+  item_bits_y                20
+  item_bits_z                30
+  g_message_delta_encoding_class (0x5AC3E0) in the file: 1 (0 = lan, 1 = internet; set at run time)
+
+Stream (one decrypted GT2 app message; client dispatcher 0x4C59E0, checked on capture1.bin):
+  11 bits total size in bytes (incl. these bits); then items while >= 8 bits are left:
+  1 bit kind (1 = message delta, 0 = old network-game packet: 16-bit header, size in its top
+  12 bits, size-2 bytes); the last < 8 bits are left-overs (not always zero).
+Message header (iteration independent, 0x4D97A0 / 0x4D9910): 1 bit mode (0 stateless,
+  1 incremental), 6 bits definition type,
+  [3 bits if the parameters protocol changeover is on: 1 bit flag + 2 bits version; off by default,
+  absent in the capture],
+  then (iterations - 1) in bits(max_iterations - 1) bits when max_iterations > 1.
+Per iteration: [incremental: one presence bit per body field] [header fields, no baseline]
+  [body fields: all (stateless) or the present ones, against the baseline when incremental].
+No per-message size or terminator.
+
+Encoding class: the server's sv_public (byte 0x59A426, printed as 'sv_public_value'):
+  1 = internet, 0 = LAN; sent to the client as the byte at offset 8 of old packet 4
+  (server_new_client_challenge); the client sets the class = (byte == 1) (haloce code at the
+  server's 0x4C6460 twin). The local test server runs sv_public 0: capture1.bin is LAN class.
+
+Field types (global field type list 0x5AB380):
+   0 integer                      requires_parameters=1 max_size=4D5470 initialize=4D6550 dispose=4010E0
+   1 real                         requires_parameters=0 max_size=4D6EE0 initialize=4E4C60 dispose=4010E0
+   2 boolean                      requires_parameters=0 max_size=43FAF0 initialize=4E4C60 dispose=4010E0
+   3 ascii_character              requires_parameters=0 max_size=4D57B0 initialize=4E4C60 dispose=4010E0
+   4 wide_character               requires_parameters=0 max_size=4D5810 initialize=4E4C60 dispose=4010E0
+   5 ascii_string                 requires_parameters=1 max_size=4D5820 initialize=4D5B30 dispose=4010E0
+   6 wide_string                  requires_parameters=1 max_size=4D59B0 initialize=4D5B30 dispose=4010E0
+   7 arbitrary_data               requires_parameters=1 max_size=4D5B20 initialize=4D5B30 dispose=4010E0
+   8 array                        requires_parameters=1 max_size=4D5B40 initialize=4D5B80 dispose=4010E0
+   9 structure                    requires_parameters=1 max_size=4D5FC0 initialize=4D6010 dispose=4010E0
+  10 pointer                      requires_parameters=1 max_size=4D6460 initialize=4D6490 dispose=4010E0
+  11 enumeration                  requires_parameters=1 max_size=4D6520 initialize=4D6550 dispose=4010E0
+  12 bounded_index                requires_parameters=1 max_size=4D6570 initialize=4D6590 dispose=4010E0
+  13 translated_index             requires_parameters=1 max_size=4D65A0 initialize=4D65C0 dispose=4D6640
+  14 point                        requires_parameters=1 max_size=4D6CD0 initialize=4D5B30 dispose=4010E0
+  15 vector                       requires_parameters=1 max_size=4D6CD0 initialize=4D5B30 dispose=4010E0
+  16 angle                        requires_parameters=0 max_size=4D6EE0 initialize=4E4C60 dispose=4010E0
+  17 flags                        requires_parameters=1 max_size=4D6F70 initialize=4D6D10 dispose=4010E0
+  18 time                         requires_parameters=0 max_size=4D6EE0 initialize=4E4C60 dispose=4010E0
+  19 grenade_counts               requires_parameters=0 max_size=4D70A0 initialize=4E4C60 dispose=4010E0
+  20 fixed_width                  requires_parameters=1 max_size=4D6F70 initialize=4D6F80 dispose=4010E0
+  21 fixed_width_normal_vector    requires_parameters=1 max_size=4D7140 initialize=4D7160 dispose=4010E0
+  22 locality_reference_position  requires_parameters=0 max_size=4D7600 initialize=4D7620 dispose=4010E0
+  23 digital_throttle             requires_parameters=0 max_size=4D7BF0 initialize=4E4C60 dispose=4010E0
+  24 fixed_width_weapon_index     requires_parameters=0 max_size=4D7CB0 initialize=4E4C60 dispose=4010E0
+  25 fixed_width_grenade_index    requires_parameters=0 max_size=4D7D60 initialize=4E4C60 dispose=4010E0
+  26 smart_vector                 requires_parameters=1 max_size=4D7FC0 initialize=4D8000 dispose=4010E0
+  27 item_placement_position      requires_parameters=0 max_size=4D84E0 initialize=4D8500 dispose=4010E0
+
+Field properties (every one reachable from the messages):
+  598050 object_index                               translated_index            enc=4D6670 dec=4D66A0 params=598020 size=4B max=9 bits hdr=0
+         bits=9, maximum_active_at_once=511, number_of_slots=128
+  598370 integer_small                              integer                     enc=4D54D0 dec=4D5600 params=5F556C (bss: zero) size=1B max=8 bits hdr=0
+         width=0, bits=8
+  598308 boolean                                    boolean                     enc=4D5750 dec=4D5790 params=000000 size=1B max=1 bits hdr=0
+  5A6E50 locality_reference_position                locality_reference_position enc=4D7680 dec=4D7970 params=000000 size=12B max=94 bits hdr=0
+  5A6800 translational_velocity                     smart_vector                enc=4D8120 dec=4D8330 params=5A64E0 size=12B max=95 bits hdr=0
+         minimum=-100.0, maximum=100.0, bits_internet=16, range_internet=65535, bits_lan=31, range_lan=2147483647, special_count=1, special=[[0.0, 0.0, 0.0]]
+  5A6478 point3d                                    point                       enc=4D6860 dec=4D6AF0 params=5A6470 size=12B max=99 bits hdr=3
+         components=3
+  5A6B88 angular_velocity                           smart_vector                enc=4D8120 dec=4D8330 params=5A6868 size=12B max=95 bits hdr=0
+         minimum=-8.0, maximum=8.0, bits_internet=16, range_internet=65535, bits_lan=31, range_lan=2147483647, special_count=1, special=[[0.0, 0.0, 0.0]]
+  5983E0 integer_medium                             integer                     enc=4D54D0 dec=4D5600 params=5983D8 size=2B max=16 bits hdr=0
+         width=1, bits=16
+  5A70E0 fixed_width_6bits                          fixed_width                 enc=4D6FA0 dec=4D7050 params=5A70D4 size=4B max=6 bits hdr=0
+         bits=6, range=63
+  5AB620 grenade_counts                             grenade_counts              enc=4D70B0 dec=4D7100 params=000000 size=2B max=6 bits hdr=0
+  5AB690 fixed_width_3bits                          fixed_width                 enc=4D6FA0 dec=4D7050 params=5AB688 size=4B max=3 bits hdr=0
+         bits=3, range=7
+  5AB930 time                                       time                        enc=4D6EF0 dec=4D5730 params=000000 size=4B max=32 bits hdr=0
+  5A6408 fixed_width_normal_8bit                    fixed_width_normal_vector   enc=4D7350 dec=4D7510 params=5A63F8 size=12B max=40 bits hdr=0
+         theta_bits_internet=8, phi_bits_internet=8, theta_bits_lan=20, phi_bits_lan=20
+  5A3E70 definition_index                           integer                     enc=4D54D0 dec=4D5600 params=5A3E68 size=4B max=32 bits hdr=0
+         width=2, bits=32
+  597FB8 integer_large                              integer                     enc=4D54D0 dec=4D5600 params=597FB0 size=4B max=32 bits hdr=0
+         width=2, bits=32
+  598478 player_index                               translated_index            enc=4D6670 dec=4D66A0 params=598448 size=4B max=5 bits hdr=0
+         bits=5, maximum_active_at_once=17, number_of_slots=17
+  5981C8 damage_data_flags                          flags                       enc=4D6D60 dec=4D6E60 params=5981A0 size=4B max=8 bits hdr=0
+         count=8, valid_mask=0xFF
+  5980C0 vector3d                                   vector                      enc=4D6CF0 dec=4D6D00 params=5980B8 size=12B max=99 bits hdr=3
+         components=3
+  598128 real                                       real                        enc=4D56F0 dec=4D5730 params=000000 size=4B max=32 bits hdr=0
+  5AB8C8 vector2d                                   vector                      enc=4D6CF0 dec=4D6D00 params=5AB8C0 size=8B max=66 bits hdr=2
+         components=2
+  5A8E80 update_id                                  integer                     enc=4D54D0 dec=4D5600 params=5A8E78 size=1B max=6 bits hdr=0
+         width=6, bits=6
+  5A8EF0 update_tick_count                          integer                     enc=4D54D0 dec=4D5600 params=5A8EE8 size=1B max=5 bits hdr=0
+         width=5, bits=5
+  5A8F80 control_flags                              flags                       enc=4D6D60 dec=4D6E60 params=5A8F58 size=4B max=15 bits hdr=0
+         count=15, valid_mask=0x7CD3
+  5A8FE8 digital_throttle                           digital_throttle            enc=4D7C00 dec=4D7C70 params=000000 size=8B max=4 bits hdr=0
+  5A9058 fixed_width_1bit                           fixed_width                 enc=4D6FA0 dec=4D7050 params=5A9050 size=4B max=1 bits hdr=0
+         bits=1, range=1
+  5A90C0 fixed_width_weapon_index                   fixed_width_weapon_index    enc=4D7CC0 dec=4D7D20 params=000000 size=2B max=3 bits hdr=0
+  5A9128 fixed_width_grenade_index                  fixed_width_grenade_index   enc=4D7D70 dec=4D7DD0 params=000000 size=2B max=2 bits hdr=0
+  5A3D28 hud_chat_message                           wide_string                 enc=4D59D0 dec=4D5AA0 params=5A3D20 size=512B max=4088 bits hdr=8
+         max_length=255, length_bits=8
+  5A3D98 hud_chat_message_ptr                       pointer                     enc=4D64C0 dec=4D64F0 params=5A3D90 size=4B max=4088 bits hdr=0
+         referent=hud_chat_message
+  599588 slayer_score_array                         array                       enc=4D5BC0 dec=4D5DC0 params=599578 size=64B max=528 bits hdr=16
+         count=16, stride=4, element=integer_large
+  598D60 ctf_score_array                            array                       enc=4D5BC0 dec=4D5DC0 params=598D50 size=8B max=66 bits hdr=2
+         count=2, stride=4, element=integer_large
+  599330 oddball_score_array                        array                       enc=4D5BC0 dec=4D5DC0 params=599324 size=64B max=528 bits hdr=16
+         count=16, stride=4, element=integer_large
+  598F08 king_score_array                           array                       enc=4D5BC0 dec=4D5DC0 params=598EF8 size=64B max=528 bits hdr=16
+         count=16, stride=4, element=integer_large
+  599488 race_score_array                           array                       enc=4D5BC0 dec=4D5DC0 params=599478 size=64B max=528 bits hdr=16
+         count=16, stride=4, element=integer_large
+  5ABEF8 object_change_colors                       array                       enc=4D5BC0 dec=4D5DC0 params=5ABEE8 size=48B max=396 bits hdr=12
+         count=12, stride=4, element=real
+  5A95C0 network_game_name                          wide_string                 enc=4D59D0 dec=4D5AA0 params=5A95B8 size=128B max=1031 bits hdr=7
+         max_length=64, length_bits=7
+  5A9370 map_name                                   ascii_string                enc=4D5840 dec=4D5940 params=5A9368 size=128B max=1032 bits hdr=8
+         max_length=128, length_bits=8
+  5A9400 network_map                                structure                   enc=4D6070 dec=4D6270 params=5A93D8 size=132B max=1066 bits hdr=2
+         member  0 +0000 integer_large                            integer
+         member  1 +0004 map_name                                 ascii_string
+  5987E0 game_variant_human_readable_description    wide_string                 enc=4D59D0 dec=4D5AA0 params=5987D8 size=48B max=389 bits hdr=5
+         max_length=24, length_bits=5
+  598508 universal_variant_flags                    flags                       enc=4D6D60 dec=4D6E60 params=5984E0 size=4B max=9 bits hdr=0
+         count=9, valid_mask=0x1FF
+  5986F8 universal_variant                          structure                   enc=4D6070 dec=4D6270 params=598570 size=72B max=508 bits hdr=24
+         member  0 +0000 boolean                                  boolean
+         member  1 +0001 integer_small                            integer
+         member  2 +0002 integer_small                            integer
+         member  3 +0003 integer_small                            integer
+         member  4 +0004 universal_variant_flags                  flags
+         member  5 +0008 integer_large                            integer
+         member  6 +000C boolean                                  boolean
+         member  7 +000D integer_small                            integer
+         member  8 +000E integer_small                            integer
+         member  9 +000F integer_small                            integer
+         member 10 +0010 integer_large                            integer
+         member 11 +0014 integer_large                            integer
+         member 12 +0018 integer_large                            integer
+         member 13 +001C integer_large                            integer
+         member 14 +0020 real                                     real
+         member 15 +0024 integer_large                            integer
+         member 16 +0028 integer_large                            integer
+         member 17 +002C integer_large                            integer
+         member 18 +0030 integer_large                            integer
+         member 19 +0034 integer_large                            integer
+         member 20 +0038 integer_small                            integer
+         member 21 +003C integer_large                            integer
+         member 22 +0040 boolean                                  boolean
+         member 23 +0044 integer_large                            integer
+  598770 game_engine_variant                        array                       enc=4D5BC0 dec=4D5DC0 params=598760 size=56B max=504 bits hdr=56
+         count=56, stride=1, element=integer_small
+  598870 game_variant_flags                         flags                       enc=4D6D60 dec=4D6E60 params=598848 size=4B max=1 bits hdr=0
+         count=1, valid_mask=0x1
+  598930 game_variant                               structure                   enc=4D6070 dec=4D6270 params=5988D8 size=216B max=1439 bits hdr=5
+         member  0 +0000 game_variant_human_readable_description  wide_string
+         member  1 +0030 integer_large                            integer
+         member  2 +0034 universal_variant                        structure
+         member  3 +009C game_engine_variant                      array
+         member  4 +00D4 game_variant_flags                       flags
+  5A9470 network_player_name                        wide_string                 enc=4D59D0 dec=4D5AA0 params=5A9468 size=24B max=196 bits hdr=4
+         max_length=12, length_bits=4
+  5A9550 network_player                             structure                   enc=4D6070 dec=4D6270 params=5A94D8 size=32B max=267 bits hdr=7
+         member  0 +0000 network_player_name                      wide_string
+         member  1 +0018 integer_medium                           integer
+         member  2 +001A integer_medium                           integer
+         member  3 +001C integer_small                            integer
+         member  4 +001D integer_small                            integer
+         member  5 +001E integer_small                            integer
+         member  6 +001F integer_small                            integer
+  5A9638 network_game_players                       array                       enc=4D5BC0 dec=4D5DC0 params=5A9628 size=512B max=4288 bits hdr=16
+         count=16, stride=32, element=network_player
+  5AC1D0 parameters_protocol_array                  array                       enc=4D5BC0 dec=4D5DC0 params=5AC1C0 size=256B max=2112 bits hdr=64
+         count=64, stride=4, element=integer_large
+  5AA890 local_player_update_sequence_number        integer                     enc=4D54D0 dec=4D5600 params=5AA88C size=1B max=5 bits hdr=0
+         width=5, bits=5
+  5AA900 remote_player_action_update_baseline_id    integer                     enc=4D54D0 dec=4D5600 params=5AA8F8 size=1B max=1 bits hdr=0
+         width=3, bits=1
+  5AA970 remote_player_update_sequence_number       integer                     enc=4D54D0 dec=4D5600 params=5AA968 size=1B max=3 bits hdr=0
+         width=4, bits=3
+  5AB780 fixed_width_normal_16bit                   fixed_width_normal_vector   enc=4D7350 dec=4D7510 params=5AB770 size=12B max=40 bits hdr=0
+         theta_bits_internet=16, phi_bits_internet=16, theta_bits_lan=20, phi_bits_lan=20
+  5AA7D8 motd_text                                  ascii_string                enc=4D5840 dec=4D5940 params=5AA7D0 size=256B max=2048 bits hdr=8
+         max_length=255, length_bits=8
+  5AA5A8 rcon_password                              ascii_string                enc=4D5840 dec=4D5940 params=5AA5A4 size=9B max=68 bits hdr=4
+         max_length=8, length_bits=4
+  5AA618 rcon_command                               ascii_string                enc=4D5840 dec=4D5940 params=5AA610 size=65B max=519 bits hdr=7
+         max_length=64, length_bits=7
+  5AA6E0 rcon_response                              ascii_string                enc=4D5840 dec=4D5940 params=5AA6D8 size=81B max=647 bits hdr=7
+         max_length=80, length_bits=7
+
+Messages (K_MESSAGE_DELTA_PACKETS 0x5573C0):
+
+00 (0x00) object_deletion   def at 5AC0A8, max_iterations 1
+   sizes (bits): header fields max 0, body max 9, iteration 10, independent header 7, total 17
+   header struct 0 bytes, body struct 4 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 object_index                       object_index                             translated_index
+
+01 (0x01) projectile_update   def at 5A7078, max_iterations 1
+   sizes (bits): header fields max 26, body max 189, iteration 217, independent header 7, total 224
+   header struct 7 bytes, body struct 24 bytes; header field set 5A6BF0; sent as mode ? (encode call sites)
+   header  0 +0000 object_index                       object_index                             translated_index
+   header  1 +0004 baseline_index                     integer_small                            integer
+   header  2 +0005 message_index                      integer_small                            integer
+   header  3 +0006 update_baseline                    boolean                                  boolean
+   body    0 +0000 position                           locality_reference_position              locality_reference_position
+   body    1 +000C translational_velocity             translational_velocity                   smart_vector
+
+02 (0x02) equipment_update   def at 5A6D40, max_iterations 1
+   sizes (bits): header fields max 26, body max 289, iteration 318, independent header 7, total 325
+   header struct 7 bytes, body struct 36 bytes; header field set 5A6BF0; sent as mode ? (encode call sites)
+   header  0 +0000 object_index                       object_index                             translated_index
+   header  1 +0004 baseline_index                     integer_small                            integer
+   header  2 +0005 message_index                      integer_small                            integer
+   header  3 +0006 update_baseline                    boolean                                  boolean
+   body    0 +0000 position                           point3d                                  point
+   body    1 +000C translational_velocity             translational_velocity                   smart_vector
+   body    2 +0018 angular_velocity                   angular_velocity                         smart_vector
+
+03 (0x03) weapon_update   def at 5A7458, max_iterations 1
+   sizes (bits): header fields max 26, body max 232, iteration 263, independent header 7, total 270
+   header struct 7 bytes, body struct 44 bytes; header field set 5A6BF0; sent as mode ? (encode call sites)
+   header  0 +0000 object_index                       object_index                             translated_index
+   header  1 +0004 baseline_index                     integer_small                            integer
+   header  2 +0005 message_index                      integer_small                            integer
+   header  3 +0006 update_baseline                    boolean                                  boolean
+   body    0 +0000 position                           point3d                                  point
+   body    1 +000C translational_velocity             translational_velocity                   smart_vector
+   body    2 +0024 magazine_0_rounds_total            integer_medium                           integer
+   body    3 +0026 magazine_1_rounds_total            integer_medium                           integer
+   body    4 +0028 age                                fixed_width_6bits                        fixed_width
+
+04 (0x04) biped_update   def at 5ABE70, max_iterations 1
+   sizes (bits): header fields max 27, body max 16, iteration 47, independent header 7, total 54
+   header struct 8 bytes, body struct 13 bytes; header field set 5ABE08; sent as mode ? (encode call sites)
+   header  0 +0000 object_index                       object_index                             translated_index
+   header  1 +0004 baseline_index                     integer_small                            integer
+   header  2 +0005 message_index                      integer_small                            integer
+   header  3 +0006 update_baseline                    boolean                                  boolean
+   header  4 +0007 force_shield_update                boolean                                  boolean
+   body    0 +0000 grenade_counts                     grenade_counts                           grenade_counts
+   body    1 +0004 body_vitality                      fixed_width_3bits                        fixed_width
+   body    2 +0008 shield_vitality                    fixed_width_6bits                        fixed_width
+   body    3 +000C shield_stun_ticks_greater_than_zero boolean                                  boolean
+
+05 (0x05) vehicle_update   def at 5ABA90, max_iterations 1
+   sizes (bits): header fields max 58, body max 365, iteration 429, independent header 7, total 436
+   header struct 12 bytes, body struct 64 bytes; header field set 5ABA28; sent as mode ? (encode call sites)
+   header  0 +0005 message_index                      integer_small                            integer
+   header  1 +0004 baseline_index                     integer_small                            integer
+   header  2 +0000 object_index                       object_index                             translated_index
+   header  3 +0008 timestamp                          time                                     time
+   header  4 +0006 update_baseline                    boolean                                  boolean
+   body    0 +0000 at_rest_bit                        boolean                                  boolean
+   body    1 +0004 position                           locality_reference_position              locality_reference_position
+   body    2 +0010 translational_velocity             translational_velocity                   smart_vector
+   body    3 +001C angular_velocity                   angular_velocity                         smart_vector
+   body    4 +0028 forward                            fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    5 +0034 up                                 fixed_width_normal_8bit                  fixed_width_normal_vector
+
+06 (0x06) hud_add_item   def at 5A3EE8, max_iterations 1
+   sizes (bits): header fields max 0, body max 56, iteration 59, independent header 7, total 66
+   header struct 0 bytes, body struct 8 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 item_definition_index              definition_index                         integer
+   body    1 +0004 message_offset                     integer_small                            integer
+   body    2 +0006 quantity                           integer_medium                           integer
+
+07 (0x07) player_create   def at 599748, max_iterations 1
+   sizes (bits): header fields max 0, body max 77, iteration 81, independent header 7, total 88
+   header struct 0 bytes, body struct 16 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 player_list_index                  integer_small                            integer
+   body    1 +0004 raw_player_index                   integer_large                            integer
+   body    2 +0008 translated_player_index            player_index                             translated_index
+   body    3 +000C team_index                         integer_large                            integer
+
+08 (0x08) player_spawn   def at 5997C0, max_iterations 1
+   sizes (bits): header fields max 0, body max 155, iteration 167, independent header 7, total 174
+   header struct 0 bytes, body struct 42 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 translated_player_index            player_index                             translated_index
+   body    1 +0004 unit_index                         object_index                             translated_index
+   body    2 +0008 team_index                         integer_large                            integer
+   body    3 +000C parent_vehicle_index               object_index                             translated_index
+   body    4 +0010 vehicle_seat_index                 integer_medium                           integer
+   body    5 +0014 weapon_object_indices[0]           object_index                             translated_index
+   body    6 +0018 weapon_object_indices[1]           object_index                             translated_index
+   body    7 +001C weapon_object_indices[2]           object_index                             translated_index
+   body    8 +0020 weapon_object_indices[3]           object_index                             translated_index
+   body    9 +0024 desired_weapon_index               integer_medium                           integer
+   body   10 +0026 powerup_durations[0]               integer_medium                           integer
+   body   11 +0028 powerup_durations[1]               integer_medium                           integer
+
+09 (0x09) player_exit_vehicle   def at 5ABC50, max_iterations 1
+   sizes (bits): header fields max 0, body max 10, iteration 12, independent header 7, total 19
+   header struct 0 bytes, body struct 5 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 object_index                       object_index                             translated_index
+   body    1 +0004 forced_exit                        boolean                                  boolean
+
+10 (0x0A) player_set_action_result   def at 5998B8, max_iterations 1
+   sizes (bits): header fields max 0, body max 87, iteration 93, independent header 7, total 100
+   header struct 0 bytes, body struct 20 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 player_index                       player_index                             translated_index
+   body    1 +0004 action_result_type                 integer_large                            integer
+   body    2 +0008 action_object_index                object_index                             translated_index
+   body    3 +000C action_result                      integer_medium                           integer
+   body    4 +000E action_seat_index                  integer_medium                           integer
+   body    5 +0010 weapon_to_drop_as_result_of_swap   object_index                             translated_index
+
+11 (0x0B) player_effect_start   def at 598230, max_iterations 1
+   sizes (bits): header fields max 0, body max 212, iteration 218, independent header 7, total 225
+   header struct 0 bytes, body struct 32 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 damage_definition_index            integer_large                            integer
+   body    1 +0004 damage_owner_object_index          object_index                             translated_index
+   body    2 +0008 damage_flags                       damage_data_flags                        flags
+   body    3 +000C direction                          vector3d                                 vector
+   body    4 +0018 scale                              real                                     real
+   body    5 +001C total_damage                       real                                     real
+
+12 (0x0C) unit_kill   def at 5ABCA8, max_iterations 1
+   sizes (bits): header fields max 0, body max 162, iteration 174, independent header 7, total 181
+   header struct 0 bytes, body struct 32 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 unit_index                         object_index                             translated_index
+   body    1 +0004 should_cause_ping                  boolean                                  boolean
+   body    2 +0005 died                               boolean                                  boolean
+   body    3 +0006 feign_death                        boolean                                  boolean
+   body    4 +0007 died_flying                        boolean                                  boolean
+   body    5 +0008 ignore_hard_pings                  boolean                                  boolean
+   body    6 +0009 force_hard_pings                   boolean                                  boolean
+   body    7 +000A should_alignment_vector_be_null    boolean                                  boolean
+   body    8 +000C damage_part                        integer_medium                           integer
+   body    9 +0010 angle                              real                                     real
+   body   10 +0014 alignment_vector                   vector2d                                 vector
+   body   11 +001C respawn_timer                      integer_large                            integer
+
+13 (0x0D) client_game_update   def at 5A92A0, max_iterations 1
+   sizes (bits): header fields max 6, body max 110, iteration 125, independent header 7, total 132
+   header struct 1 bytes, body struct 50 bytes; header field set 5A9274; sent as mode ? (encode call sites)
+   header  0 +0000 id                                 update_id                                integer
+   body    0 +0000 ticks_to_apply_update_to           update_tick_count                        integer
+   body    1 +0008 control_flags                      control_flags                            flags
+   body    2 +000C desired_facing.yaw                 real                                     real
+   body    3 +0010 desired_facing.pitch               real                                     real
+   body    4 +0020 throttle                           digital_throttle                         digital_throttle
+   body    5 +0028 primary_trigger                    fixed_width_1bit                         fixed_width
+   body    6 +002C desired_weapon_index               fixed_width_weapon_index                 fixed_width_weapon_index
+   body    7 +002E desired_grenade_index              fixed_width_grenade_index                fixed_width_grenade_index
+   body    8 +0030 desired_zoom_level                 integer_medium                           integer
+
+14 (0x0E) player_handle_powerup   def at 599978, max_iterations 1
+   sizes (bits): header fields max 0, body max 37, iteration 40, independent header 7, total 47
+   header struct 0 bytes, body struct 8 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 player_index                       player_index                             translated_index
+   body    1 +0004 powerup_type                       integer_medium                           integer
+   body    2 +0006 duration_in_ticks                  integer_medium                           integer
+
+15 (0x0F) hud_chat   def at 5A3E00, max_iterations 1
+   sizes (bits): header fields max 0, body max 4104, iteration 4107, independent header 7, total 4114
+   header struct 0 bytes, body struct 12 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 msg_type                           integer_small                            integer
+   body    1 +0004 player_number                      integer_small                            integer
+   body    2 +0008 message                            hud_chat_message_ptr                     pointer
+
+16 (0x10) slayer_update   def at 5995F0, max_iterations 1
+   sizes (bits): header fields max 0, body max 1056, iteration 1058, independent header 7, total 1065
+   header struct 0 bytes, body struct 128 bytes; header field set 597F98; sent as mode 0/1 (encode call sites)
+   body    0 +0040 individual_score                   slayer_score_array                       array
+   body    1 +0000 team_score                         slayer_score_array                       array
+
+17 (0x11) ctf_update   def at 598DF0, max_iterations 1
+   sizes (bits): header fields max 32, body max 74, iteration 108, independent header 7, total 115
+   header struct 4 bytes, body struct 9 bytes; header field set 598DC8; sent as mode 0 (encode call sites)
+   header  0 +0000 flag_swap_timer                    integer_large                            integer
+   body    0 +0000 score                              ctf_score_array                          array
+   body    1 +0008 team_with_flag                     integer_small                            integer
+
+18 (0x12) oddball_update   def at 599410, max_iterations 1
+   sizes (bits): header fields max 0, body max 1584, iteration 1587, independent header 7, total 1594
+   header struct 0 bytes, body struct 260 bytes; header field set 597F98; sent as mode 0/1 (encode call sites)
+   body    0 +0044 individual_score                   oddball_score_array                      array
+   body    1 +0004 team_score                         oddball_score_array                      array
+   body    2 +00C4 current_ball_owner                 oddball_score_array                      array
+
+19 (0x13) king_update   def at 598F70, max_iterations 1
+   sizes (bits): header fields max 0, body max 560, iteration 562, independent header 7, total 569
+   header struct 0 bytes, body struct 424 bytes; header field set 597F98; sent as mode 0/1 (encode call sites)
+   body    0 +0000 score                              king_score_array                         array
+   body    1 +01A4 hill_id                            integer_large                            integer
+
+20 (0x14) race_update   def at 5994F0, max_iterations 1
+   sizes (bits): header fields max 0, body max 1648, iteration 1653, independent header 7, total 1660
+   header struct 0 bytes, body struct 200 bytes; header field set 597F98; sent as mode 0/1 (encode call sites)
+   body    0 +0088 team_laps                          race_score_array                         array
+   body    1 +0004 first_flag                         race_score_array                         array
+   body    2 +0044 lap_bit_vector                     race_score_array                         array
+   body    3 +0000 lap_completed_value                integer_large                            integer
+   body    4 +0084 rally_flag                         integer_large                            integer
+
+21 (0x15) player_score_update   def at 598AC8, max_iterations 1
+   sizes (bits): header fields max 5, body max 289, iteration 311, independent header 7, total 318
+   header struct 4 bytes, body struct 40 bytes; header field set 598A9C; sent as mode 1 (encode call sites)
+   header  0 +0000 player_index                       player_index                             translated_index
+   body    0 +0000 kills[0]                           integer_medium                           integer
+   body    1 +0002 kills[1]                           integer_medium                           integer
+   body    2 +0004 kills[2]                           integer_medium                           integer
+   body    3 +0006 kills[3]                           integer_medium                           integer
+   body    4 +0008 assists[0]                         integer_medium                           integer
+   body    5 +000A assists[1]                         integer_medium                           integer
+   body    6 +000C assists[2]                         integer_medium                           integer
+   body    7 +000E assists[3]                         integer_medium                           integer
+   body    8 +0010 friendly_fire_kills                integer_medium                           integer
+   body    9 +0012 deaths                             integer_medium                           integer
+   body   10 +0014 suicides                           integer_medium                           integer
+   body   11 +0016 multiplayer_stats.ctf_statistics.flag_grabs integer_medium                           integer
+   body   12 +0018 multiplayer_stats.ctf_statistics.flag_returns integer_medium                           integer
+   body   13 +001A multiplayer_stats.ctf_statistics.flag_scores integer_medium                           integer
+   body   14 +001C special                            integer_large                            integer
+   body   15 +0020 is_odd_man_out                     boolean                                  boolean
+   body   16 +0024 speed_multiplier                   real                                     real
+
+22 (0x16) game_engine_change_mode   def at 598C10, max_iterations 1
+   sizes (bits): header fields max 0, body max 32, iteration 33, independent header 7, total 40
+   header struct 0 bytes, body struct 4 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 new_mode                           integer_large                            integer
+
+23 (0x17) game_engine_map_reset   def at 598C58, max_iterations 1
+   sizes (bits): header fields max 0, body max 1, iteration 2, independent header 7, total 9
+   header struct 0 bytes, body struct 1 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 dummy                              boolean                                  boolean
+
+24 (0x18) multiplayer_hud_message   def at 598A08, max_iterations 1
+   sizes (bits): header fields max 0, body max 69, iteration 72, independent header 7, total 79
+   header struct 0 bytes, body struct 12 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 player_index                       player_index                             translated_index
+   body    1 +0004 message                            integer_large                            integer
+   body    2 +0008 message_data                       integer_large                            integer
+
+25 (0x19) multiplayer_sound   def at 5992D8, max_iterations 1
+   sizes (bits): header fields max 0, body max 32, iteration 33, independent header 7, total 40
+   header struct 0 bytes, body struct 4 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 index                              integer_large                            integer
+
+26 (0x1A) team_change   def at 5996D0, max_iterations 1
+   sizes (bits): header fields max 0, body max 16, iteration 18, independent header 7, total 25
+   header struct 0 bytes, body struct 2 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 player_number                      integer_small                            integer
+   body    1 +0001 new_team_choice                    integer_small                            integer
+
+27 (0x1B) unit_drop_current_weapon   def at 5ABDA0, max_iterations 1
+   sizes (bits): header fields max 0, body max 19, iteration 22, independent header 7, total 29
+   header struct 0 bytes, body struct 9 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 unit_index                         object_index                             translated_index
+   body    1 +0004 weapon_to_drop                     object_index                             translated_index
+   body    2 +0008 immediate                          boolean                                  boolean
+
+28 (0x1C) vehicle_new   def at 5ABB28, max_iterations 1
+   sizes (bits): header fields max 0, body max 484, iteration 499, independent header 7, total 506
+   header struct 0 bytes, body struct 97 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 definition_index                   definition_index                         integer
+   body    1 +0004 server_object_index                object_index                             translated_index
+   body    2 +0008 owner_team_index                   integer_medium                           integer
+   body    3 +000C owner_player_index                 player_index                             translated_index
+   body    4 +0010 owner_object_index                 object_index                             translated_index
+   body    5 +0014 weapon_object_indices[0]           object_index                             translated_index
+   body    6 +0018 weapon_object_indices[1]           object_index                             translated_index
+   body    7 +001C weapon_object_indices[2]           object_index                             translated_index
+   body    8 +0020 weapon_object_indices[3]           object_index                             translated_index
+   body    9 +0060 current_baseline_index             integer_small                            integer
+   body   10 +0024 position                           point3d                                  point
+   body   11 +0030 forward                            fixed_width_normal_8bit                  fixed_width_normal_vector
+   body   12 +003C up                                 fixed_width_normal_8bit                  fixed_width_normal_vector
+   body   13 +0048 translational_velocity             translational_velocity                   smart_vector
+   body   14 +0054 angular_velocity                   angular_velocity                         smart_vector
+
+29 (0x1D) biped_new   def at 5ABF60, max_iterations 1
+   sizes (bits): header fields max 0, body max 772, iteration 789, independent header 7, total 796
+   header struct 0 bytes, body struct 137 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 definition_index                   definition_index                         integer
+   body    1 +0004 server_object_index                object_index                             translated_index
+   body    2 +0008 owner_team_index                   integer_medium                           integer
+   body    3 +000C owner_player_index                 player_index                             translated_index
+   body    4 +0010 owner_object_index                 object_index                             translated_index
+   body    5 +0020 forward                            fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    6 +002C up                                 fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    7 +0044 change_colors                      object_change_colors                     array
+   body    8 +0074 unit_integrated_light_on_bit       boolean                                  boolean
+   body    9 +0078 integrated_light_battery           fixed_width_6bits                        fixed_width
+   body   10 +007C current_baseline_index             integer_small                            integer
+   body   11 +0014 position                           point3d                                  point
+   body   12 +0038 translational_velocity             translational_velocity                   smart_vector
+   body   13 +007D grenade_counts                     grenade_counts                           grenade_counts
+   body   14 +0080 body_vitality                      fixed_width_3bits                        fixed_width
+   body   15 +0084 shield_vitality                    fixed_width_6bits                        fixed_width
+   body   16 +0088 shield_stun_ticks_greater_than_zero boolean                                  boolean
+
+30 (0x1E) projectile_new   def at 5A6F90, max_iterations 1
+   sizes (bits): header fields max 0, body max 443, iteration 454, independent header 7, total 461
+   header struct 0 bytes, body struct 81 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 definition_index                   definition_index                         integer
+   body    1 +0004 server_object_index                object_index                             translated_index
+   body    2 +0008 owner_team_index                   integer_medium                           integer
+   body    3 +000C owner_player_index                 player_index                             translated_index
+   body    4 +0010 owner_object_index                 object_index                             translated_index
+   body    5 +0020 forward                            fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    6 +002C up                                 fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    7 +0044 angular_velocity                   angular_velocity                         smart_vector
+   body    8 +0050 current_baseline_index             integer_small                            integer
+   body    9 +0014 position                           locality_reference_position              locality_reference_position
+   body   10 +0038 translational_velocity             translational_velocity                   smart_vector
+
+31 (0x1F) equipment_new   def at 5A6C48, max_iterations 1
+   sizes (bits): header fields max 0, body max 480, iteration 492, independent header 7, total 499
+   header struct 0 bytes, body struct 85 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 definition_index                   definition_index                         integer
+   body    1 +0004 server_object_index                object_index                             translated_index
+   body    2 +0008 owner_team_index                   integer_medium                           integer
+   body    3 +000C owner_player_index                 player_index                             translated_index
+   body    4 +0010 owner_object_index                 object_index                             translated_index
+   body    5 +0014 object_flags                       integer_large                            integer
+   body    6 +0024 forward                            fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    7 +0030 up                                 fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    8 +0054 current_baseline_index             integer_small                            integer
+   body    9 +0018 position                           point3d                                  point
+   body   10 +003C translational_velocity             translational_velocity                   smart_vector
+   body   11 +0048 angular_velocity                   angular_velocity                         smart_vector
+
+32 (0x20) weapon_new   def at 5A7320, max_iterations 1
+   sizes (bits): header fields max 0, body max 455, iteration 471, independent header 7, total 478
+   header struct 0 bytes, body struct 88 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 definition_index                   definition_index                         integer
+   body    1 +0004 server_object_index                object_index                             translated_index
+   body    2 +0008 owner_team_index                   integer_medium                           integer
+   body    3 +000C owner_player_index                 player_index                             translated_index
+   body    4 +0010 owner_object_index                 object_index                             translated_index
+   body    5 +0014 object_flags                       integer_large                            integer
+   body    6 +0024 forward                            fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    7 +0030 up                                 fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    8 +0048 current_baseline_index             integer_small                            integer
+   body    9 +0018 position                           point3d                                  point
+   body   10 +003C translational_velocity             translational_velocity                   smart_vector
+   body   11 +004A magazine_0_rounds_total            integer_medium                           integer
+   body   12 +004C magazine_1_rounds_total            integer_medium                           integer
+   body   13 +0050 age                                fixed_width_6bits                        fixed_width
+   body   14 +0054 magazine_0_rounds_loaded           integer_medium                           integer
+   body   15 +0056 magazine_1_rounds_loaded           integer_medium                           integer
+
+33 (0x21) game_settings_update   def at 5A96A0, max_iterations 1
+   sizes (bits): header fields max 0, body max 7968, iteration 7979, independent header 7, total 7986
+   header struct 0 bytes, body struct 1008 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 name                               network_game_name                        wide_string
+   body    1 +0080 map                                network_map                              structure
+   body    2 +0104 variant                            game_variant                             structure
+   body    3 +01DC _unused_game_engine                integer_small                            integer
+   body    4 +01DD maximum_players                    integer_small                            integer
+   body    5 +01DE difficulty_level                   integer_medium                           integer
+   body    6 +01E0 player_count                       integer_medium                           integer
+   body    7 +01E2 players                            network_game_players                     array
+   body    8 +03E4 network_game_random_seed           integer_large                            integer
+   body    9 +03E8 number_of_games_played             integer_large                            integer
+   body   10 +03EC local_data                         integer_large                            integer
+
+34 (0x22) parameters_protocol   def at 5AC238, max_iterations 1
+   sizes (bits): header fields max 0, body max 2120, iteration 2122, independent header 7, total 2129
+   header struct 0 bytes, body struct 260 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 protocol_parameters                integer_small                            integer
+   body    1 +0004 parameters_data                    parameters_protocol_array                array
+
+35 (0x23) local_player_update   def at 5AA9D8, max_iterations 1
+   sizes (bits): header fields max 0, body max 110, iteration 113, independent header 7, total 120
+   header struct 0 bytes, body struct 16 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 sequence_number                    local_player_update_sequence_number      integer
+   body    1 +0001 last_completed_update_id           update_id                                integer
+   body    2 +0004 position                           point3d                                  point
+
+36 (0x24) local_player_vehicle_update   def at 5AAA40, max_iterations 1
+   sizes (bits): header fields max 0, body max 384, iteration 392, independent header 7, total 399
+   header struct 0 bytes, body struct 68 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 sequence_number                    local_player_update_sequence_number      integer
+   body    1 +0001 last_completed_update_id           update_id                                integer
+   body    2 +0004 vehicle_index                      object_index                             translated_index
+   body    3 +0008 position                           locality_reference_position              locality_reference_position
+   body    4 +0014 translational_velocity             translational_velocity                   smart_vector
+   body    5 +0020 angular_velocity                   angular_velocity                         smart_vector
+   body    6 +002C forward                            fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    7 +0038 up                                 fixed_width_normal_8bit                  fixed_width_normal_vector
+
+37 (0x25) remote_player_action_update   def at 5AAB40, max_iterations 1
+   sizes (bits): header fields max 12, body max 70, iteration 89, independent header 7, total 96
+   header struct 6 bytes, body struct 48 bytes; header field set 5AAAF8; sent as mode 0/1 (encode call sites)
+   header  0 +0000 player_index                       player_index                             translated_index
+   header  1 +0004 update_id                          update_id                                integer
+   header  2 +0005 baseline_id                        remote_player_action_update_baseline_id  integer
+   body    0 +0000 ticks_to_apply_update_to           update_tick_count                        integer
+   body    1 +0004 action.control_flags               control_flags                            flags
+   body    2 +0024 facing_vector                      fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    3 +0010 action.throttle                    digital_throttle                         digital_throttle
+   body    4 +0018 action.primary_trigger             fixed_width_1bit                         fixed_width
+   body    5 +001C action.desired_weapon_index        fixed_width_weapon_index                 fixed_width_weapon_index
+   body    6 +001E action.desired_grenade_index       fixed_width_grenade_index                fixed_width_grenade_index
+
+38 (0x26) super_remote_players_action_update   def at 5AABE8, max_iterations 16
+   sizes (bits): header fields max 12, body max 70, iteration 89, independent header 11, total 1435
+   header struct 6 bytes, body struct 48 bytes; header field set 5AAAF8; sent as mode 1 (encode call sites)
+   header  0 +0000 player_index                       player_index                             translated_index
+   header  1 +0004 update_id                          update_id                                integer
+   header  2 +0005 baseline_id                        remote_player_action_update_baseline_id  integer
+   body    0 +0000 ticks_to_apply_update_to           update_tick_count                        integer
+   body    1 +0004 action.control_flags               control_flags                            flags
+   body    2 +0024 facing_vector                      fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    3 +0010 action.throttle                    digital_throttle                         digital_throttle
+   body    4 +0018 action.primary_trigger             fixed_width_1bit                         fixed_width
+   body    5 +001C action.desired_weapon_index        fixed_width_weapon_index                 fixed_width_weapon_index
+   body    6 +001E action.desired_grenade_index       fixed_width_grenade_index                fixed_width_grenade_index
+
+39 (0x27) remote_player_position_update   def at 5AACD8, max_iterations 1
+   sizes (bits): header fields max 14, body max 94, iteration 109, independent header 7, total 116
+   header struct 6 bytes, body struct 12 bytes; header field set 5AAC90; sent as mode 0 (encode call sites)
+   header  0 +0000 player_index                       player_index                             translated_index
+   header  1 +0004 update_id                          update_id                                integer
+   header  2 +0005 sequence_number                    remote_player_update_sequence_number     integer
+   body    0 +0000 position                           locality_reference_position              locality_reference_position
+
+40 (0x28) remote_player_vehicle_update   def at 5AAD20, max_iterations 1
+   sizes (bits): header fields max 14, body max 373, iteration 393, independent header 7, total 400
+   header struct 6 bytes, body struct 64 bytes; header field set 5AAC90; sent as mode 0 (encode call sites)
+   header  0 +0000 player_index                       player_index                             translated_index
+   header  1 +0004 update_id                          update_id                                integer
+   header  2 +0005 sequence_number                    remote_player_update_sequence_number     integer
+   body    0 +0000 vehicle_index                      object_index                             translated_index
+   body    1 +0004 position                           locality_reference_position              locality_reference_position
+   body    2 +0010 translational_velocity             translational_velocity                   smart_vector
+   body    3 +001C angular_velocity                   angular_velocity                         smart_vector
+   body    4 +0028 forward                            fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    5 +0034 up                                 fixed_width_normal_8bit                  fixed_width_normal_vector
+
+41 (0x29) remote_player_total_update_biped   def at 5AAE10, max_iterations 1
+   sizes (bits): header fields max 15, body max 164, iteration 187, independent header 7, total 194
+   header struct 9 bytes, body struct 60 bytes; header field set 5AADB8; sent as mode 0/1 (encode call sites)
+   header  0 +0000 action_header.player_index         player_index                             translated_index
+   header  1 +0004 action_header.update_id            update_id                                integer
+   header  2 +0005 action_header.baseline_id          remote_player_action_update_baseline_id  integer
+   header  3 +0008 sequence_number                    remote_player_update_sequence_number     integer
+   body    0 +0000 action_data.ticks_to_apply_update_to update_tick_count                        integer
+   body    1 +0004 action_data.action.control_flags   control_flags                            flags
+   body    2 +0024 action_data.facing_vector          fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    3 +0010 action_data.action.throttle        digital_throttle                         digital_throttle
+   body    4 +0018 action_data.action.primary_trigger fixed_width_1bit                         fixed_width
+   body    5 +001C action_data.action.desired_weapon_index fixed_width_weapon_index                 fixed_width_weapon_index
+   body    6 +001E action_data.action.desired_grenade_index fixed_width_grenade_index                fixed_width_grenade_index
+   body    7 +0030 biped_data.position                locality_reference_position              locality_reference_position
+
+42 (0x2A) remote_player_total_update_vehicle   def at 5AAEC8, max_iterations 1
+   sizes (bits): header fields max 15, body max 443, iteration 471, independent header 7, total 478
+   header struct 9 bytes, body struct 112 bytes; header field set 5AADB8; sent as mode 0/1 (encode call sites)
+   header  0 +0000 action_header.player_index         player_index                             translated_index
+   header  1 +0004 action_header.update_id            update_id                                integer
+   header  2 +0005 action_header.baseline_id          remote_player_action_update_baseline_id  integer
+   header  3 +0008 sequence_number                    remote_player_update_sequence_number     integer
+   body    0 +0000 action_data.ticks_to_apply_update_to update_tick_count                        integer
+   body    1 +0004 action_data.action.control_flags   control_flags                            flags
+   body    2 +0024 action_data.facing_vector          fixed_width_normal_8bit                  fixed_width_normal_vector
+   body    3 +0010 action_data.action.throttle        digital_throttle                         digital_throttle
+   body    4 +0018 action_data.action.primary_trigger fixed_width_1bit                         fixed_width
+   body    5 +001C action_data.action.desired_weapon_index fixed_width_weapon_index                 fixed_width_weapon_index
+   body    6 +001E action_data.action.desired_grenade_index fixed_width_grenade_index                fixed_width_grenade_index
+   body    7 +0030 vehicle_data.vehicle_index         object_index                             translated_index
+   body    8 +0034 vehicle_data.position              locality_reference_position              locality_reference_position
+   body    9 +0040 vehicle_data.translational_velocity translational_velocity                   smart_vector
+   body   10 +004C vehicle_data.angular_velocity      angular_velocity                         smart_vector
+   body   11 +0058 vehicle_data.forward               fixed_width_normal_8bit                  fixed_width_normal_vector
+   body   12 +0064 vehicle_data.up                    fixed_width_normal_8bit                  fixed_width_normal_vector
+
+43 (0x2B) weapon_start_reload   def at 5A71B8, max_iterations 1
+   sizes (bits): header fields max 0, body max 57, iteration 61, independent header 7, total 68
+   header struct 0 bytes, body struct 10 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 weapon_index                       object_index                             translated_index
+   body    1 +0004 magazine_index                     integer_medium                           integer
+   body    2 +0006 starting_total_rounds              integer_medium                           integer
+   body    3 +0008 starting_loaded_rounds             integer_medium                           integer
+
+44 (0x2C) weapon_ammo_pickup_mid_reload   def at 5A7150, max_iterations 1
+   sizes (bits): header fields max 0, body max 41, iteration 44, independent header 7, total 51
+   header struct 0 bytes, body struct 8 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 weapon_index                       object_index                             translated_index
+   body    1 +0004 magazine_index                     integer_medium                           integer
+   body    2 +0006 rounds_picked_up                   integer_medium                           integer
+
+45 (0x2D) weapon_finish_reload   def at 5A7230, max_iterations 1
+   sizes (bits): header fields max 0, body max 57, iteration 61, independent header 7, total 68
+   header struct 0 bytes, body struct 10 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 weapon_index                       object_index                             translated_index
+   body    1 +0004 magazine_index                     integer_medium                           integer
+   body    2 +0006 ending_total_rounds                integer_medium                           integer
+   body    3 +0008 ending_loaded_rounds               integer_medium                           integer
+
+46 (0x2E) weapon_cancel_reload   def at 5A72A8, max_iterations 1
+   sizes (bits): header fields max 0, body max 57, iteration 61, independent header 7, total 68
+   header struct 0 bytes, body struct 10 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 weapon_index                       object_index                             translated_index
+   body    1 +0004 magazine_index                     integer_medium                           integer
+   body    2 +0006 ending_total_rounds                integer_medium                           integer
+   body    3 +0008 ending_loaded_rounds               integer_medium                           integer
+
+47 (0x2F) netgame_equipment_new   def at 598998, max_iterations 1
+   sizes (bits): header fields max 0, body max 57, iteration 60, independent header 7, total 67
+   header struct 0 bytes, body struct 10 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 server_object_index                object_index                             translated_index
+   body    1 +0004 item_definition_index              integer_large                            integer
+   body    2 +0008 netgame_equipment_index            integer_medium                           integer
+
+48 (0x30) projectile_detonate   def at 5A6EB8, max_iterations 1
+   sizes (bits): header fields max 0, body max 108, iteration 110, independent header 7, total 117
+   header struct 0 bytes, body struct 16 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 object_index                       object_index                             translated_index
+   body    1 +0004 position                           point3d                                  point
+
+49 (0x31) item_accelerate   def at 5AC0F0, max_iterations 1
+   sizes (bits): header fields max 0, body max 81, iteration 84, independent header 7, total 91
+   header struct 0 bytes, body struct 20 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 object_index                       object_index                             translated_index
+   body    1 +0004 magnitude                          real                                     real
+   body    2 +0008 direction                          fixed_width_normal_16bit                 fixed_width_normal_vector
+
+50 (0x32) damage_dealt   def at 5AC158, max_iterations 1
+   sizes (bits): header fields max 0, body max 16, iteration 19, independent header 7, total 26
+   header struct 0 bytes, body struct 9 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 damaged_object_index               object_index                             translated_index
+   body    1 +0004 shield_damage                      fixed_width_6bits                        fixed_width
+   body    2 +0008 shields_depleted                   boolean                                  boolean
+
+51 (0x33) projectile_attach   def at 5A6F28, max_iterations 1
+   sizes (bits): header fields max 0, body max 34, iteration 37, independent header 7, total 44
+   header struct 0 bytes, body struct 10 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 projectile_index                   object_index                             translated_index
+   body    1 +0004 parent_index                       object_index                             translated_index
+   body    2 +0008 parent_node_index                  integer_medium                           integer
+
+52 (0x34) client_to_server_pong   def at 5A8E18, max_iterations 1
+   sizes (bits): header fields max 0, body max 8, iteration 9, independent header 7, total 16
+   header struct 0 bytes, body struct 1 bytes; header field set 597F98; sent as mode ? (encode call sites)
+   body    0 +0000 player_number                      integer_small                            integer
+
+53 (0x35) super_ping_update   def at 5AA4A8, max_iterations 16
+   sizes (bits): header fields max 0, body max 40, iteration 42, independent header 11, total 683
+   header struct 0 bytes, body struct 8 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 player_number                      integer_small                            integer
+   body    1 +0004 player_ping                        integer_large                            integer
+
+54 (0x36) sv_motd   def at 5AA840, max_iterations 1
+   sizes (bits): header fields max 0, body max 2048, iteration 2049, independent header 7, total 2056
+   header struct 0 bytes, body struct 256 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 motd_text                          motd_text                                ascii_string
+
+55 (0x37) rcon_request   def at 5AA680, max_iterations 1
+   sizes (bits): header fields max 0, body max 587, iteration 589, independent header 7, total 596
+   header struct 0 bytes, body struct 74 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 password                           rcon_password                            ascii_string
+   body    1 +0009 command                            rcon_command                             ascii_string
+
+56 (0x38) rcon_response   def at 5AA748, max_iterations 1
+   sizes (bits): header fields max 0, body max 647, iteration 648, independent header 7, total 655
+   header struct 0 bytes, body struct 81 bytes; header field set 597F98; sent as mode 0 (encode call sites)
+   body    0 +0000 response                           rcon_response                            ascii_string
+
+OpenSauce XML cross-check:
+  no mismatches
+
+Other notes from the walk:
+  digital_throttle: 8 bytes of room for a 12-byte value
+  network_game_name: 128 bytes of room for a 130-byte value
+  network_map: 132 bytes of room for a 133-byte value
+  map_name: 128 bytes of room for a 129-byte value
+  game_variant_human_readable_description: 48 bytes of room for a 50-byte value
+  network_player_name: 24 bytes of room for a 26-byte value

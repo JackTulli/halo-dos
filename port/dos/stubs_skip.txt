@@ -1,0 +1,2 @@
+# names tools/dos_stubs.py must not make stand-ins for: the platform
+# implements them

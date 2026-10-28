@@ -1,0 +1,133 @@
+{
+  "comment": "MS-DOS and Windows 95 build inputs (tools/dos_build.py). The game whole but for Halo's renderer, menus (the ui.map shell: the build has its own menu), sound engine (no sound device yet): the campaign's actor AI, scripts, cinematics and saved games are in. Compiled once for 32-bit x86 without SSE and linked twice: for DOS by Open Watcom's wlink with the DOS/32A extender, and for Windows 95 by lld-link. See port/dos/README.md.",
+  "exclude_dirs": [
+    "source/bink/",
+    "source/editor/",
+    "source/rasterizer/",
+    "source/render/",
+    "source/saved films/",
+    "source/sound/sound_import/",
+    "source/tool/",
+    "source/memory/zlib/contrib/"
+  ],
+  "exclude_sources": [
+    "source/main/d3d_intimacy.cpp",
+    "source/bitmaps/bitmap_extract.c",
+    "source/bitmaps/bitmaps_quantitize.c",
+    "source/bitmaps/targa_file.c",
+    "source/bitmaps/tiff_file.c",
+    "source/cache/cache_files_decompress_windows.c",
+    "source/cache/cache_files_windows.c",
+    "source/cache/physical_memory_map.c",
+    "source/cache/xbox_texture_cache.c",
+    "source/cseries/stack_walk_windows.c",
+    "source/interface/attract_mode.c",
+    "source/interface/marketing_and_strategic_business_development.c",
+    "source/interface/progress_bar.c",
+    "source/interface/ui_widget.c",
+    "source/interface/ui_widget_event_handler_functions.c",
+    "source/interface/ui_widget_game_data_input_functions.c",
+    "source/interface/ui_widget_group.c",
+    "source/interface/ui_widget_text_search_and_replace_functions.c",
+    "source/interface/virtual_keyboard.c",
+    "source/structures/structure_detail_objects.c",
+    "source/structures/structure_visibility.c",
+    "source/structures/structure_render.c"
+  ],
+  "extra_game_sources": [
+    "source/render/render_cameras.c",
+    "source/rasterizer/rasterizer_geometry.c",
+    "source/rasterizer/rasterizer_swizzle.c"
+  ],
+  "defines": [
+    "HALO_RELEASE",
+    "HALO_CUSTOM_EDITION"
+  ],
+  "comment_defines": "HALO_CUSTOM_EDITION: Halo Custom Edition's maps (MAPS_CE, <name>@ce), converted to the Xbox's layouts as they load by ChupathingyCE's ce_*.c (port_game_sources) and seen where they were linked (port/dos/game/dos_ce.c)",
+  "xdk_sources": [
+    "chupathingyce/port/linux/src/msvc_wide.c",
+    "port/support/xbox_map_rebase.c",
+    "chupathingyce/port/windows/src/windows_crt.c",
+    "chupathingyce/port/linux/src/xnet.c"
+  ],
+  "render_sources": [
+    "port/support/xbox_textures_convert.c"
+  ],
+  "port_game_sources": [
+    "coop_enemies.c",
+    "coop_scripts.c",
+    "coop_spectate.c",
+    "follow_camera.c",
+    "map_families.c",
+    "map_packs.c",
+    "network_actors.c",
+    "network_coop.c",
+    "network_damage.c",
+    "network_distributed.c",
+    "network_game_layout.c",
+    "network_objects.c",
+    "network_rules.c",
+    "object_bounds_cache.c",
+    "pal_tags.c",
+    "powerup_timers.c",
+    "render_interpolation.c",
+    "team_change.c",
+    "ce_bsp.c",
+    "ce_functions.c",
+    "ce_hud.c",
+    "ce_map_checks.c",
+    "ce_models.c",
+    "ce_repairs.c",
+    "ce_resources.c",
+    "ce_vorbis.c"
+  ],
+  "comment_port_game_sources": "ChupathingyCE's game code of its native ports (chupathingyce/port/linux/game) the DOS and Windows 95 builds play the same: its netcode, network co-op, PAL maps, map families, interpolation's bookkeeping",
+  "p2p_sources": [
+    "chupathingyce/port/linux/src/p2p.c",
+    "chupathingyce/port/linux/src/p2p_signal.c",
+    "chupathingyce/port/linux/src/p2p_crypto.c",
+    "chupathingyce/port/linux/src/p2p_lobby.c",
+    "chupathingyce/port/linux/src/p2p_probe.c",
+    "chupathingyce/port/linux/src/p2p_copies.c",
+    "chupathingyce/port/linux/src/log_address.c"
+  ],
+  "comment_p2p_sources": "ChupathingyCE's internet play (invites, the encrypted tunnel, MQTT signalling, the game list), polled from the game's loop: tools/dos_hooks.py's internet_play",
+  "third_party_sources": [
+    "chupathingyce/port/third_party/kcp/ikcp.c",
+    "chupathingyce/port/third_party/monocypher/monocypher.c",
+    "chupathingyce/port/third_party/monocypher/monocypher-ed25519.c",
+    "port/dos/third_party/zstd_decompress.c"
+  ],
+  "d3d": {
+    "comment": "The Direct3D build (HALOD3D.EXE, port/dos/DIRECT3D.md): the game compiled again with HALO_D3D (no renderer trims), Halo's own renderer and texture cache put back, the port's own 3D renderer left out, the Direct3D device (port/dos/d3d) in its place.",
+    "restore_dirs": [
+      "source/rasterizer/",
+      "source/render/"
+    ],
+    "restore_sources": [
+      "source/cache/xbox_texture_cache.c",
+      "source/structures/structure_detail_objects.c",
+      "source/structures/structure_visibility.c",
+      "source/structures/structure_render.c"
+    ],
+    "exclude_sources": [
+      "source/rasterizer/rasterizer_debug.c"
+    ],
+    "port_game_exclude": [
+      "dos_render_game.c",
+      "dos_level.c",
+      "dos_models.c",
+      "dos_textures.c",
+      "dos_particles.c",
+      "dos_hud_game.c",
+      "dos_simplify.c",
+      "dos_menu_art.c",
+      "dos_stubs_generated.c",
+      "dos_common_generated.c"
+    ],
+    "win95_exclude": [
+      "w95_gl.c",
+      "w95_d3d.c"
+    ]
+  }
+}

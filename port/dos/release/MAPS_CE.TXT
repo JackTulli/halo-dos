@@ -1,0 +1,7 @@
+Halo Custom Edition's maps go in this folder (optional): copy the "maps"
+folder of your Halo Custom Edition install here. Every Custom Edition map
+needs bitmaps.map, sounds.map and loc.map from it; the CE maps you put here
+also show in CUSTOM GAME's map list.
+
+When you join a Custom Edition server whose map is not here, the game
+downloads it from the map repository Chimera uses and keeps it here.

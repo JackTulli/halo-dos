@@ -1,0 +1,97 @@
+; USER32.DEF
+;
+; The functions the Windows 98 SE / Me build may import from USER32.dll:
+; the import library is made from this list (llvm-dlltool -k), and
+; tools/win9x_check.py fails a linked image that imports anything else.
+;
+; Each name here is exported and implemented by the USER32 of Windows 98
+; Second Edition and of Windows Me: Windows 95 functions, ANSI versions only
+; (9x implements none of USER32's W functions but MessageBoxW and a few
+; text ones, which the build does not use). wsprintfA is cdecl.
+
+LIBRARY USER32.dll
+EXPORTS
+AdjustWindowRect@12
+AdjustWindowRectEx@16
+BeginPaint@8
+ChangeDisplaySettingsA@8
+CharLowerA@4
+CharUpperA@4
+ClientToScreen@8
+ClipCursor@4
+CloseClipboard@0
+CreateWindowExA@48
+DefWindowProcA@16
+DestroyWindow@4
+DialogBoxIndirectParamA@20
+DispatchMessageA@4
+EmptyClipboard@0
+EnableWindow@8
+EndDialog@8
+EndPaint@8
+EnumDisplaySettingsA@12
+FillRect@12
+FrameRect@12
+GetActiveWindow@0
+GetAsyncKeyState@4
+GetClientRect@8
+GetClipboardData@4
+GetClipCursor@4
+GetCursorPos@4
+GetDC@4
+GetDesktopWindow@0
+GetDlgItem@8
+GetFocus@0
+GetForegroundWindow@0
+GetKeyboardLayout@4
+GetKeyboardState@4
+GetKeyState@4
+GetMessageA@16
+GetSystemMetrics@4
+GetWindowLongA@8
+GetWindowRect@8
+InvalidateRect@12
+IsClipboardFormatAvailable@4
+IsIconic@4
+IsWindowVisible@4
+KillTimer@8
+LoadCursorA@8
+LoadIconA@8
+LoadImageA@24
+MapVirtualKeyA@8
+MessageBeep@4
+MessageBoxA@16
+MsgWaitForMultipleObjects@20
+OpenClipboard@4
+PeekMessageA@20
+PostMessageA@16
+PostQuitMessage@4
+RegisterClassA@4
+RegisterClassExA@4
+RegisterWindowMessageA@4
+ReleaseCapture@0
+ReleaseDC@8
+ScreenToClient@8
+SendMessageA@16
+SetCapture@4
+SetClipboardData@8
+SetCursor@4
+SetCursorPos@8
+SetFocus@4
+SetForegroundWindow@4
+SetRect@20
+SetTimer@16
+SetWindowLongA@12
+SetWindowPos@28
+SetWindowTextA@8
+ShowCursor@4
+ShowWindow@8
+SystemParametersInfoA@16
+ToAscii@20
+TranslateMessage@4
+UnregisterClassA@8
+UpdateWindow@4
+ValidateRect@8
+WaitMessage@0
+wsprintfA
+wvsprintfA@12

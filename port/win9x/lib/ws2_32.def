@@ -1,0 +1,48 @@
+; WS2_32.DEF
+;
+; The functions the Windows 98 SE / Me build may import from WS2_32.dll:
+; the import library is made from this list (llvm-dlltool -k), and
+; tools/win9x_check.py fails a linked image that imports anything else.
+;
+; Each name here is exported by name and implemented by the WS2_32 (Winsock
+; 2.2) of Windows 98 Second Edition and of Windows Me: the Berkeley calls,
+; gethostbyname (no getaddrinfo: Windows XP), and the WSA calls the
+; platform layer makes (WSAIoctl's SIO_UDP_CONNRESET is refused on 9x,
+; harmlessly). Imported by name: the Windows SDK's ws2_32.lib imports most
+; of these by ordinal.
+
+LIBRARY WS2_32.dll
+EXPORTS
+__WSAFDIsSet@8
+accept@12
+bind@12
+closesocket@4
+connect@12
+gethostbyaddr@12
+gethostbyname@4
+gethostname@8
+getpeername@12
+getservbyname@8
+getsockname@12
+getsockopt@20
+htonl@4
+htons@4
+inet_addr@4
+inet_ntoa@4
+ioctlsocket@12
+listen@8
+ntohl@4
+ntohs@4
+recv@16
+recvfrom@24
+select@20
+send@16
+sendto@24
+setsockopt@20
+shutdown@8
+socket@12
+WSACleanup@0
+WSAGetLastError@0
+WSAIoctl@36
+WSASetLastError@4
+WSAStartup@8

@@ -1,0 +1,15 @@
+; COMDLG32.DEF
+;
+; The functions the Windows 98 SE / Me build may import from COMDLG32.dll:
+; the import library is made from this list (llvm-dlltool -k), and
+; tools/win9x_check.py fails a linked image that imports anything else.
+;
+; Each name here is exported and implemented by the COMDLG32 of Windows 98
+; Second Edition and of Windows Me: the open and save dialogs (the ISO and
+; maps folder pickers), ANSI versions.
+
+LIBRARY COMDLG32.dll
+EXPORTS
+CommDlgExtendedError@0
+GetOpenFileNameA@4
+GetSaveFileNameA@4

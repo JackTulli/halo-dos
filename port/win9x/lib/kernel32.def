@@ -1,0 +1,159 @@
+; KERNEL32.DEF
+;
+; The functions the Windows 98 SE / Me build may import from KERNEL32.dll:
+; the import library is made from this list (llvm-dlltool -k), and
+; tools/win9x_check.py fails a linked image that imports anything else.
+;
+; Each name here is exported and implemented by the KERNEL32 of Windows 98
+; Second Edition and of Windows Me (Geoff Chappell's KERNEL32 export tables:
+; first exported by 3.51/4.0 and not NT-only, or added in 4.10). None of
+; the NT 4.0 additions 9x exports only as stubs (TryEnterCriticalSection,
+; SwitchToThread, SignalObjectAndWait, the fibers), and of the W functions
+; only the ones 9x implements (MultiByteToWideChar, WideCharToMultiByte,
+; lstrlenW). In this copy (the DOS repository's Windows 95 build) none of
+; 98's or 95 OSR2's additions either: GetFileAttributesExA and
+; GetDiskFreeSpaceExA are left out (the C runtime looks the first up at run
+; time), or the program would not start on the first Windows 95.
+
+LIBRARY KERNEL32.dll
+EXPORTS
+CloseHandle@4
+CompareFileTime@8
+CopyFileA@12
+CreateDirectoryA@8
+CreateEventA@16
+CreateFileA@28
+CreateFileMappingA@24
+CreateMutexA@12
+CreateProcessA@40
+CreateSemaphoreA@16
+CreateThread@24
+DebugBreak@0
+DeleteCriticalSection@4
+DeleteFileA@4
+DuplicateHandle@28
+EnterCriticalSection@4
+ExitProcess@4
+ExitThread@4
+FileTimeToLocalFileTime@8
+FileTimeToSystemTime@8
+FindClose@4
+FindFirstFileA@8
+FindNextFileA@8
+FlushFileBuffers@4
+FlushInstructionCache@12
+FormatMessageA@28
+FreeLibrary@4
+GetACP@0
+GetCommandLineA@0
+GetComputerNameA@8
+GetCPInfo@8
+GetCurrentDirectoryA@8
+GetCurrentProcess@0
+GetCurrentProcessId@0
+GetCurrentThread@0
+GetCurrentThreadId@0
+GetDiskFreeSpaceA@20
+GetDriveTypeA@4
+GetEnvironmentVariableA@12
+GetExitCodeThread@8
+GetFileAttributesA@4
+GetFileInformationByHandle@8
+GetFileSize@8
+GetFileTime@16
+GetFileType@4
+GetFullPathNameA@16
+GetLastError@0
+GetLocalTime@4
+GetLogicalDrives@0
+GetModuleFileNameA@12
+GetModuleHandleA@4
+GetOEMCP@0
+GetPriorityClass@4
+GetProcAddress@8
+GetStartupInfoA@4
+GetStdHandle@4
+GetSystemDirectoryA@8
+GetThreadContext@8
+GetSystemInfo@4
+GetSystemTime@4
+GetSystemTimeAsFileTime@4
+GetTempFileNameA@16
+GetTempPathA@8
+GetThreadPriority@4
+GetTickCount@0
+GetTimeZoneInformation@4
+GetVersion@0
+GetVersionExA@4
+GetVolumeInformationA@32
+GetWindowsDirectoryA@8
+GlobalAlloc@8
+GlobalFree@4
+GlobalLock@4
+GlobalMemoryStatus@4
+GlobalUnlock@4
+InitializeCriticalSection@4
+IsBadCodePtr@4
+IsBadReadPtr@8
+IsBadWritePtr@8
+IsDebuggerPresent@0
+LeaveCriticalSection@4
+LoadLibraryA@4
+LocalAlloc@8
+LocalFree@4
+lstrcmpiA@8
+lstrcpyA@8
+lstrcpynA@12
+lstrlenA@4
+lstrlenW@4
+MapViewOfFile@20
+MapViewOfFileEx@24
+MoveFileA@8
+MultiByteToWideChar@24
+OpenEventA@12
+OutputDebugStringA@4
+PeekNamedPipe@24
+PulseEvent@4
+QueryPerformanceCounter@4
+QueryPerformanceFrequency@4
+RaiseException@16
+ReadFile@20
+ReleaseMutex@4
+ReleaseSemaphore@12
+RemoveDirectoryA@4
+ResetEvent@4
+ResumeThread@4
+SetConsoleCtrlHandler@8
+SetCurrentDirectoryA@4
+SetEndOfFile@4
+SetEnvironmentVariableA@8
+SetErrorMode@4
+SetEvent@4
+SetFileAttributesA@8
+SetFilePointer@16
+SetFileTime@16
+SetLastError@4
+SetPriorityClass@8
+SetStdHandle@8
+SetThreadPriority@8
+SetUnhandledExceptionFilter@4
+Sleep@4
+SleepEx@8
+SuspendThread@4
+SystemTimeToFileTime@8
+TerminateProcess@8
+TlsAlloc@0
+TlsFree@4
+TlsGetValue@4
+TlsSetValue@8
+UnhandledExceptionFilter@4
+UnmapViewOfFile@4
+VirtualAlloc@16
+VirtualFree@12
+VirtualProtect@16
+VirtualQuery@12
+WaitForMultipleObjects@16
+WaitForSingleObject@8
+WideCharToMultiByte@32
+WriteConsoleA@20
+WriteFile@20

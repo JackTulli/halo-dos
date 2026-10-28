@@ -1,0 +1,127 @@
+packet entry array at 005AA358, 38 entries
+ 0 class 0  message_client_broadcast_game_search_packet          size   12 version 1 flags 0
+        shorts  count    2 size    0
+        bytes   count    8 size    0
+ 1 class 0  message_client_ping_packet                           size    4 version 1 flags 0
+        longs   count    1 size    0
+ 2 class 1  message_server_game_advertise_packet                 size  368 version 1 flags 0
+        raw     count  368 size    0
+ 3 class 1  message_server_pong_packet                           size    8 version 1 flags 0
+        longs   count    1 size    0
+        longs   count    1 size    0
+ 4 class 2  message_server_new_client_challenge_packet           size  148 version 1 flags 0
+        bytes   count    8 size    0
+        bytes   count    1 size    0
+        pad     count    3 size    0
+        longs   count    1 size    0
+        longs   count    1 size    0
+        string  count  127 size    0
+ 5 class 2  message_server_machine_accepted_packet               size    8 version 1 flags 0
+        longs   count    1 size    0
+        shorts  count    1 size    0
+        pad     count    2 size    0
+ 6 class 2  message_server_machine_rejected_packet               size    4 version 1 flags 0
+        longs   count    1 size    0
+ 7 class 2  message_server_game_is_ending_holdup_packet          size    4 version 1 flags 0
+        longs   count    1 size    0
+ 8 class 2  message_server_game_settings_update_packet           size 1008 version 1 flags 0
+        raw     count 1008 size    0
+ 9 class 2  message_server_pregame_countdown_packet              size    2 version 1 flags 0
+        shorts  count    1 size    0
+10 class 2  message_server_begin_game_packet                     size    4 version 1 flags 0
+        longs   count    1 size    0
+11 class 2  message_server_graceful_game_exit_pregame_packet     size    4 version 1 flags 0
+        longs   count    1 size    0
+12 class 2  message_server_pregame_keep_alive_packet             size    2 version 1 flags 0
+        shorts  count    1 size    0
+13 class 6  message_server_postgame_keep_alive_packet            size    2 version 1 flags 0
+        shorts  count    1 size    0
+14 class 3  message_client_join_game_request_packet              size  148 version 1 flags 0
+        bytes   count   16 size    0
+        shorts  count    9 size    0
+        bytes   count   73 size    0
+        bytes   count    1 size    0
+        pad     count    2 size    0
+        shorts  count   12 size    0
+        shorts  count    2 size    0
+        bytes   count    4 size    0
+        pad     count    2 size    0
+        longs   count    1 size    0
+15 class 3  message_client_add_player_request_pregame_packet     size   32 version 1 flags 0
+        shorts  count   12 size    0
+        shorts  count    2 size    0
+        bytes   count    4 size    0
+16 class 3  message_client_remove_player_request_pregame_packet  size   32 version 1 flags 0
+        shorts  count   12 size    0
+        shorts  count    2 size    0
+        bytes   count    4 size    0
+17 class 3  message_client_settings_request_packet               size    4 version 1 flags 0
+        longs   count    1 size    0
+18 class 3  message_client_player_settings_request_packet        size   32 version 1 flags 0
+        shorts  count   12 size    0
+        shorts  count    2 size    0
+        bytes   count    4 size    0
+19 class 3  message_client_game_start_request_packet             size    2 version 1 flags 0
+        shorts  count    1 size    0
+20 class 3  message_client_graceful_game_exit_pregame_packet     size    4 version 1 flags 0
+        longs   count    1 size    0
+21 class 3  message_client_map_is_precached_pregame_packet       size  256 version 1 flags 0
+        bytes   count  256 size    0
+22 class 4  message_server_game_update_packet                    size  528 version 1 flags 0
+        longs   count    3 size    0
+        pad     count    2 size    0
+        array   count   16 size    0
+        longs   count    6 size    0
+        shorts  count    3 size    0
+        pad     count    2 size    0
+23 class 4  message_server_add_player_ingame_packet              size   32 version 1 flags 0
+        shorts  count   12 size    0
+        shorts  count    2 size    0
+        bytes   count    4 size    0
+24 class 4  message_server_remove_player_ingame_packet           size   36 version 1 flags 0
+        shorts  count   12 size    0
+        shorts  count    2 size    0
+        bytes   count    4 size    0
+        longs   count    1 size    0
+25 class 4  message_server_game_over_packet                      size    4 version 1 flags 0
+        longs   count    1 size    0
+26 class 5  message_client_loaded_packet                         size    4 version 1 flags 0
+        longs   count    1 size    0
+27 class 5  message_client_game_update_packet                    size   40 version 1 flags 0
+        longs   count    1 size    0
+        pad     count    2 size    0
+        array   count    1 size    0
+        longs   count    6 size    0
+        shorts  count    3 size    0
+        pad     count    2 size    0
+28 class 5  message_client_add_player_request_ingame_packet      size   32 version 1 flags 0
+        shorts  count   12 size    0
+        shorts  count    2 size    0
+        bytes   count    4 size    0
+29 class 5  message_client_remove_player_request_ingame_packet   size   32 version 1 flags 0
+        shorts  count   12 size    0
+        shorts  count    2 size    0
+        bytes   count    4 size    0
+30 class 5  message_client_graceful_game_exit_ingame_packet      size    4 version 1 flags 0
+        longs   count    1 size    0
+31 class 5  message_client_host_crashed_cry_for_help_packet      size   16 version 1 flags 0
+        longs   count    3 size    0
+        shorts  count    1 size    0
+        pad     count    2 size    0
+32 class 5  message_client_join_new_host_packet                  size   16 version 1 flags 0
+        longs   count    3 size    0
+        shorts  count    1 size    0
+        pad     count    2 size    0
+33 class 6  message_server_reconnect_packet                      size    8 version 1 flags 0
+        longs   count    2 size    0
+34 class 6  message_server_graceful_game_exit_postgame_packet    size    4 version 1 flags 0
+        longs   count    1 size    0
+35 class 7  message_client_remove_player_request_postgame_packet size   32 version 1 flags 0
+        shorts  count   12 size    0
+        shorts  count    2 size    0
+        bytes   count    4 size    0
+36 class 7  message_client_switch_to_pregame_packet              size    4 version 1 flags 0
+        longs   count    1 size    0
+37 class 7  message_client_graceful_game_exit_postgame_packet    size    4 version 1 flags 0
+        longs   count    1 size    0
+group 'network_game_messages_group': 39 types, 8 classes, decoded 1536, encoded 2048

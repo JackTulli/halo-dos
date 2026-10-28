@@ -1,0 +1,122 @@
+{
+  "comment": "Windows 98 SE / Me build inputs (tools/win9x_build.py). The game sources and the multiplayer units are the Linux build's (port/linux/port.json); the platform layer is the Windows build's (port/windows) with the units below, over the 9x build's own C runtime (nxdk's PDCLib with a KERNEL32 platform layer, port/win9x/pdclib and port/win9x/src) instead of the UCRT. See port/win9x/README.md.",
+  "linux_platform_sources": [
+    "bink_null.c",
+    "d3d8_gl.c",
+    "d3d8_resources.c",
+    "dsound_mix_kernels.c",
+    "dsound_sdl.c",
+    "gl_functions.c",
+    "halo_linker_common.c",
+    "msvc_wide.c",
+    "nv2a_combiner_ff.c",
+    "nv2a_psh.c",
+    "nv2a_vsh.c",
+    "nv2a_vsh_cpu.c",
+    "p2p.c",
+    "p2p_crypto.c",
+    "p2p_master.c",
+    "port_config.c",
+    "xbdm.c",
+    "xbox_files.c",
+    "xbox_kernel.c",
+    "xbox_map_rebase.c",
+    "xbox_memory.c",
+    "xbox_textures.c",
+    "xbox_textures_convert.c",
+    "xbox_xapi.c",
+    "xgpu_fixed.c",
+    "xgpu_fixed_textures.c",
+    "xgpu_text.c",
+    "xinput_sdl.c",
+    "xiso.c",
+    "xnet.c"
+  ],
+  "replaced_platform_sources": {
+    "sdl_platform.c": "the window, input and sound backend: port/win9x/platform/w9x_platform.c (platform_sources) over the Win32 units next to it (win32_platform_sources)",
+    "p2p_discord.c": "Discord's client needs Windows 10; p2p.c makes no Discord calls on 9x",
+    "posix_files.c": "port/windows/src/win32_files.c (as in the Windows build)",
+    "posix_net.c": "port/windows/src/win32_net.c (as in the Windows build)",
+    "memory_watch.c": "port/windows/src/win32_memory_watch.c (as in the Windows build)",
+    "msvc_crt.c": "the 9x C runtime (port/win9x/src/w9x_crt.c and w9x_crt_io.c)"
+  },
+  "windows_sources": [
+    "win32_files.c",
+    "win32_memory_watch.c",
+    "win32_net.c",
+    "win32_p2p.c",
+    "win32_posix.c"
+  ],
+  "windows_platform_sources": [
+    "windows_crt.c"
+  ],
+  "platform_sources": [
+    "port/win9x/platform/w9x_platform.c",
+    "port/win9x/platform/w9x_wide_files.c"
+  ],
+  "win32_platform_sources": [
+    "port/win9x/platform/w9x_audio.c",
+    "port/win9x/platform/w9x_gl.c",
+    "port/win9x/platform/w9x_input.c",
+    "port/win9x/platform/w9x_launcher.c",
+    "port/win9x/platform/w9x_shell.c",
+    "port/win9x/platform/w9x_window.c"
+  ],
+  "runtime_sources": [
+    "port/win9x/src/w9x_crt.c",
+    "port/win9x/src/w9x_crt_io.c",
+    "port/win9x/src/w9x_malloc.c",
+    "port/win9x/src/w9x_tls.s",
+    "port/win9x/src/w9x_chkstk.s",
+    "port/win9x/src/msvc_printf.c",
+    "port/win9x/src/msvc_strtod.c",
+    "port/xbox/src/nx_math.c",
+    "port/xbox/src/nx_string.c"
+  ],
+  "startup_sources": [
+    "port/win9x/src/w9x_start.c",
+    "port/win9x/src/w9x_cpucheck.c"
+  ],
+  "pdclib_replaced": [
+    "_PDCLIB/_PDCLIB_filemode.c",
+    "_PDCLIB/_PDCLIB_prepread.c",
+    "_PDCLIB/_PDCLIB_prepwrite.c",
+    "_PDCLIB/errno.c",
+    "_dlmalloc/malloc.c",
+    "stdio/fclose.c",
+    "stdio/vsnprintf.c",
+    "stdlib/abort.c",
+    "string/memcmp.c",
+    "string/memcpy.c",
+    "string/memmove.c",
+    "string/memset.c",
+    "time/asctime.c",
+    "time/ctime.c",
+    "time/localtime.c"
+  ],
+  "nxdk_math_replaced": [
+    "acosh", "asinh", "atanh", "cbrt", "erf", "erfc", "exp2", "expm1", "fdim", "fma", "fmod", "ilogb", "lgamma",
+    "log1p", "log2", "logb", "lrint", "lround", "nan", "nextafter", "remquo", "scalbln", "scalbn", "tgamma"
+  ],
+  "nxdk_runtime_helpers": [
+    "_alldiv.s", "_allmul.s", "_allrem.s", "_allshl.s", "_allshr.s", "_aulldiv.s", "_aullrem.s", "_aullshl.s",
+    "_aullshr.s"
+  ],
+  "import_libraries": [
+    "kernel32",
+    "user32",
+    "gdi32",
+    "winmm",
+    "wsock32",
+    "advapi32",
+    "comdlg32"
+  ],
+  "runtime_dlls": [
+    "opengl32.dll",
+    "dsound.dll",
+    "dinput.dll",
+    "shell32.dll",
+    "iphlpapi.dll",
+    "comctl32.dll"
+  ]
+}

@@ -1,0 +1,48 @@
+; GDI32.DEF
+;
+; The functions the Windows 98 SE / Me build may import from GDI32.dll:
+; the import library is made from this list (llvm-dlltool -k), and
+; tools/win9x_check.py fails a linked image that imports anything else.
+;
+; Each name here is exported and implemented by the GDI32 of Windows 98
+; Second Edition and of Windows Me: Windows 95 functions (the pixel-format
+; and SwapBuffers ones come with OpenGL 1.1 for 95, and are in 98's GDI32;
+; Get/SetDeviceGammaRamp are 98's), ANSI versions only.
+
+LIBRARY GDI32.dll
+EXPORTS
+BitBlt@36
+ChoosePixelFormat@8
+CreateCompatibleBitmap@12
+CreateCompatibleDC@4
+CreateDIBSection@24
+CreateFontA@56
+CreateFontIndirectA@4
+CreatePen@12
+CreateSolidBrush@4
+DeleteDC@4
+DeleteObject@4
+DescribePixelFormat@16
+ExtTextOutA@32
+GdiFlush@0
+GetDeviceCaps@8
+GetDeviceGammaRamp@8
+GetObjectA@12
+GetPixelFormat@4
+GetStockObject@4
+GetTextExtentPoint32A@16
+GetTextMetricsA@8
+PatBlt@24
+Rectangle@20
+SelectObject@8
+SetBkColor@8
+SetBkMode@8
+SetDeviceGammaRamp@8
+SetDIBitsToDevice@48
+SetPixelFormat@12
+SetStretchBltMode@8
+SetTextColor@8
+StretchBlt@44
+StretchDIBits@52
+SwapBuffers@4
+TextOutA@20

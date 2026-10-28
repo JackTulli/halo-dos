@@ -1,0 +1,20 @@
+; ADVAPI32.DEF
+;
+; The functions the Windows 98 SE / Me build may import from ADVAPI32.dll:
+; the import library is made from this list (llvm-dlltool -k), and
+; tools/win9x_check.py fails a linked image that imports anything else.
+;
+; Each name here is exported and implemented by the ADVAPI32 of Windows 98
+; Second Edition and of Windows Me: the registry, ANSI versions only. The
+; CryptoAPI (CryptAcquireContextA, CryptGenRandom) is looked up at run time:
+; Windows 95 before OSR2 lacks it.
+
+LIBRARY ADVAPI32.dll
+EXPORTS
+RegCloseKey@4
+RegCreateKeyExA@36
+RegDeleteKeyA@8
+RegDeleteValueA@8
+RegOpenKeyExA@20
+RegQueryValueExA@24
+RegSetValueExA@24

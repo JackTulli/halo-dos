@@ -1,0 +1,7 @@
+Put the maps of Halo: Combat Evolved for the original Xbox in this folder:
+the .map files of the "maps" folder on the game's disc (ui.map,
+bloodgulch.map, a10.map and the others: 24 files). README.TXT, section 1,
+says how to get them from your disc.
+
+Halo PC's maps are not these and do not work here; Halo Custom Edition's
+go in MAPS_CE.

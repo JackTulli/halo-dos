@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Halo for MS-DOS and Windows 95</title>
+<meta name="description" content="Halo: Combat Evolved on MS-DOS and Windows 95: software rendering in 256 colours or full colour, OpenGL, Direct3D 8 and the 3dfx Voodoo; campaign, split screen, bots, Firefight and online play.">
+<meta property="og:title" content="Halo for MS-DOS and Windows 95">
+<meta property="og:description" content="Halo: Combat Evolved on MS-DOS and Windows 95, from a Pentium 133 to today's PCs.">
+<meta property="og:image" content="https://jacktulli.github.io/halo-dos/screenshots/b30-direct3d.jpg">
+<meta name="color-scheme" content="dark">
+<style>
+:root {
+	--bg: #05080d;
+	--panel: #0b121c;
+	--panel-edge: #1c2c40;
+	--text: #d6e2ee;
+	--dim: #8496a8;
+	--blue: #4aa3ff;
+	--blue-bright: #9fd0ff;
+	--glow: rgba(74, 163, 255, 0.35);
+	--radius: 10px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+a { color: var(--blue-bright); }
+img { max-width: 100%; display: block; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+/* the top */
+.hero {
+	position: relative;
+	min-height: 78vh;
+	display: flex;
+	align-items: flex-end;
+	background: #000 url("screenshots/b30-direct3d.jpg") center / cover no-repeat;
+}
+.hero::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(180deg, rgba(5, 8, 13, 0.15) 0%, rgba(5, 8, 13, 0.55) 55%, var(--bg) 100%);
+}
+.hero .wrap { position: relative; z-index: 1; padding-bottom: 48px; }
+.kicker {
+	letter-spacing: 0.3em;
+	text-transform: uppercase;
+	font-size: 13px;
+	color: var(--blue-bright);
+	text-shadow: 0 0 12px var(--glow);
+}
+h1 {
+	margin: 6px 0 10px;
+	font-size: clamp(34px, 6vw, 64px);
+	line-height: 1.05;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	text-shadow: 0 2px 24px rgba(0, 0, 0, 0.8), 0 0 30px var(--glow);
+}
+.lead { max-width: 680px; font-size: 18px; color: #e8f1fa; text-shadow: 0 1px 8px #000; }
+.buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+.button {
+	display: inline-block;
+	padding: 12px 22px;
+	border-radius: 999px;
+	border: 1px solid var(--blue);
+	color: #fff;
+	text-decoration: none;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	font-size: 14px;
+	background: rgba(10, 20, 34, 0.6);
+	transition: background 0.15s, box-shadow 0.15s;
+}
+.button.primary { background: var(--blue); color: #021022; border-color: var(--blue); }
+.button:hover { box-shadow: 0 0 18px var(--glow); }
+.button.primary:hover { background: var(--blue-bright); }
+
+/* sections */
+section { padding: 56px 0 8px; }
+h2 {
+	font-size: 26px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	margin: 0 0 6px;
+}
+h2 + p { color: var(--dim); margin-top: 0; max-width: 760px; }
+h3 { margin: 0 0 6px; font-size: 17px; color: #fff; }
+.rule { height: 1px; background: linear-gradient(90deg, var(--blue), transparent); margin: 6px 0 22px; opacity: 0.6; }
+.note {
+	border: 1px solid var(--panel-edge);
+	background: var(--panel);
+	border-radius: var(--radius);
+	padding: 14px 18px;
+	color: var(--dim);
+	font-size: 14px;
+}
+.note b { color: var(--text); }
+
+/* the renderer switcher */
+.viewer { border: 1px solid var(--panel-edge); border-radius: var(--radius); overflow: hidden; background: #000; }
+.viewer-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	justify-content: space-between;
+	align-items: center;
+	padding: 10px 12px;
+	background: var(--panel);
+	border-bottom: 1px solid var(--panel-edge);
+}
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab {
+	font: inherit;
+	font-size: 13px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	padding: 6px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--panel-edge);
+	background: transparent;
+	color: var(--dim);
+	cursor: pointer;
+}
+.tab[aria-pressed="true"] { color: #021022; background: var(--blue); border-color: var(--blue); }
+.tab:hover:not([aria-pressed="true"]) { color: var(--text); border-color: var(--blue); }
+.viewer-frame { position: relative; aspect-ratio: 16 / 9; background: #000; }
+.viewer-frame img { width: 100%; height: 100%; object-fit: contain; }
+.viewer-frame img.pixel { image-rendering: pixelated; }
+.viewer-caption { padding: 10px 14px; font-size: 14px; color: var(--dim); background: var(--panel); border-top: 1px solid var(--panel-edge); }
+
+/* grids */
+.grid { display: grid; gap: 16px; }
+.grid.two { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.grid.three { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.card {
+	background: var(--panel);
+	border: 1px solid var(--panel-edge);
+	border-radius: var(--radius);
+	padding: 18px;
+}
+.card p { margin: 0; color: var(--dim); font-size: 15px; }
+figure { margin: 0; background: var(--panel); border: 1px solid var(--panel-edge); border-radius: var(--radius); overflow: hidden; }
+figure img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+figure img.pixel { image-rendering: pixelated; object-fit: contain; background: #000; }
+figcaption { padding: 10px 14px; font-size: 14px; color: var(--dim); }
+
+/* steps */
+ol.steps { counter-reset: step; list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+ol.steps > li {
+	counter-increment: step;
+	position: relative;
+	padding: 16px 18px 16px 64px;
+	background: var(--panel);
+	border: 1px solid var(--panel-edge);
+	border-radius: var(--radius);
+}
+ol.steps > li::before {
+	content: counter(step);
+	position: absolute;
+	left: 18px;
+	top: 16px;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	font-weight: 700;
+	color: #021022;
+	background: var(--blue);
+}
+ol.steps p { margin: 4px 0 0; color: var(--dim); }
+code, pre { font-family: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace; font-size: 14px; }
+code { background: #0f1a28; padding: 1px 6px; border-radius: 4px; color: #cfe6ff; }
+pre { background: #0f1a28; border: 1px solid var(--panel-edge); border-radius: var(--radius); padding: 14px; overflow-x: auto; color: #cfe6ff; }
+
+/* tables */
+.table-wrap { overflow-x: auto; border: 1px solid var(--panel-edge); border-radius: var(--radius); }
+table { width: 100%; border-collapse: collapse; font-size: 15px; background: var(--panel); }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--panel-edge); vertical-align: top; }
+th { color: var(--blue-bright); font-weight: 600; letter-spacing: 0.04em; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { color: var(--text); white-space: nowrap; }
+td { color: var(--dim); }
+
+footer { margin-top: 64px; padding: 28px 0 40px; border-top: 1px solid var(--panel-edge); color: var(--dim); font-size: 14px; }
+footer p { margin: 6px 0; }
+
+@media (max-width: 600px) {
+	.hero { min-height: 64vh; }
+	ol.steps > li { padding-left: 58px; }
+	td:first-child { white-space: normal; }
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+	<div class="wrap">
+		<div class="kicker">Halo: Combat Evolved</div>
+		<h1>for MS-DOS<br>and Windows 95</h1>
+		<p class="lead">From a Pentium 133 to today's PCs: software rendering in 256 colours or full colour,
+		OpenGL, Direct3D 8 and the 3dfx Voodoo. The campaign, split screen, bots, Firefight, and online play
+		with ChupathingyCE, OpenCE and Custom Edition players.</p>
+		<div class="buttons">
+			<a class="button primary" href="https://github.com/JackTulli/halo-dos/releases/latest">Download</a>
+			<a class="button" href="https://github.com/JackTulli/halo-dos">Source on GitHub</a>
+			<a class="button" href="#install">How to install</a>
+		</div>
+	</div>
+</header>
+
+<main class="wrap">
+
+<section>
+	<div class="note"><b>A fan project.</b> It isn't made, endorsed or supported by Microsoft, Bungie or
+	343 Industries; Halo is a trademark of Microsoft. <b>No game data comes with it:</b> you need your own
+	copy of Halo: Combat Evolved for the original Xbox, whose maps it plays.</div>
+</section>
+
+<section id="renderers">
+	<h2>One game, four looks</h2>
+	<p>Pick a scene and a renderer. The software renderer is what DOS draws; OpenGL and Direct3D 8 draw on
+	the graphics card, and Direct3D 8 can draw as the Xbox did, with Halo's own lightmaps, lit objects and
+	layered shaders.</p>
+	<div class="rule"></div>
+	<div class="viewer">
+		<div class="viewer-bar">
+			<div class="tabs" role="group" aria-label="Scene">
+				<button class="tab" data-scene="b30" aria-pressed="true">The Silent Cartographer</button>
+				<button class="tab" data-scene="bloodgulch" aria-pressed="false">Blood Gulch</button>
+				<button class="tab" data-scene="title" aria-pressed="false">Title</button>
+			</div>
+			<div class="tabs" role="group" aria-label="Renderer">
+				<button class="tab" data-renderer="256" aria-pressed="false">256 colours</button>
+				<button class="tab" data-renderer="software" aria-pressed="false">Software</button>
+				<button class="tab" data-renderer="opengl" aria-pressed="false">OpenGL</button>
+				<button class="tab" data-renderer="direct3d" aria-pressed="true">Direct3D 8</button>
+			</div>
+		</div>
+		<div class="viewer-frame"><img id="viewer-image" src="screenshots/b30-direct3d.jpg" alt=""></div>
+		<div class="viewer-caption" id="viewer-caption"></div>
+	</div>
+</section>
+
+<section id="features">
+	<h2>What's in it</h2>
+	<p>ChupathingyCE's game code (the source port that grew out of halo-ce-universal) with a C runtime that
+	runs on DOS and Windows 95, a renderer of its own, and both systems' hardware.</p>
+	<div class="rule"></div>
+	<div class="grid three">
+		<div class="card"><h3>The whole game</h3><p>All ten campaign levels with Halo's own scripts and cutscenes, two-player co-op, the 13 multiplayer maps with every game type, bots and Firefight.</p></div>
+		<div class="card"><h3>Split screen for four</h3><p>Keyboard and mouse, Xbox and XInput controllers, Windows joysticks or the DOS game port. Split-screen players can go online together too.</p></div>
+		<div class="card"><h3>Online play</h3><p>The online game list ChupathingyCE and OpenCE share, LAN games, invite links and Quick Join.</p></div>
+		<div class="card"><h3>Custom Edition servers</h3><p>Joins Halo Custom Edition 1.10 servers, and downloads a server's missing map from the repository Chimera uses.</p></div>
+		<div class="card"><h3>Software rendering</h3><p>8, 16 or 32-bit colour from 320x200 up, a palette made for every map, and pixel doubling for the slowest machines.</p></div>
+		<div class="card"><h3>OpenGL and Direct3D 8</h3><p>Full colour at any resolution with Halo's detail maps; Direct3D 8 adds the Xbox's lightmaps, object lighting and shaders.</p></div>
+		<div class="card"><h3>3dfx Voodoo on DOS</h3><p>A register-level driver of its own for the Voodoo Graphics: no Glide needed.</p></div>
+		<div class="card"><h3>Sound Blaster</h3><p>16-bit stereo on an SB16, 8-bit on older cards; Windows' wave mapper on Windows 95. Music, dialogue and effects.</p></div>
+		<div class="card"><h3>Settings for any machine</h3><p>Detail, draw distance, field of view, texture quality, view-model detail, frame rate up to uncapped, wide screens, rebindable keys and Halo's controller settings.</p></div>
+	</div>
+</section>
+
+<section id="gallery">
+	<h2>Gallery</h2>
+	<p>Screenshots from HALO95.EXE at 1280x720, and DOS's 320x200 in 256 colours.</p>
+	<div class="rule"></div>
+	<div class="grid two">
+		<figure><img loading="lazy" src="screenshots/split-screen-direct3d.jpg" alt="Four-player split screen on Blood Gulch"><figcaption>Four-player split screen, Direct3D 8</figcaption></figure>
+		<figure><img loading="lazy" src="screenshots/ce-map-download.jpg" alt="The joining page downloading a Custom Edition map"><figcaption>Joining a Custom Edition server downloads its map</figcaption></figure>
+		<figure><img loading="lazy" src="screenshots/menu-custom-game.jpg" alt="The Custom Game page"><figcaption>Custom games with bots</figcaption></figure>
+		<figure><img loading="lazy" src="screenshots/menu-graphics.jpg" alt="The Graphics settings page"><figcaption>Graphics settings, with Direct3D 8's Xbox look</figcaption></figure>
+		<figure><img loading="lazy" class="pixel" src="screenshots/bloodgulch-256.png" alt="Blood Gulch at 320x200 in 256 colours"><figcaption>Blood Gulch at 320x200 in 256 colours</figcaption></figure>
+		<figure><img loading="lazy" class="pixel" src="screenshots/b30-256.png" alt="The Silent Cartographer at 320x200 in 256 colours"><figcaption>The Silent Cartographer at 320x200 in 256 colours</figcaption></figure>
+		<figure><img loading="lazy" src="screenshots/chillout-opengl.jpg" alt="Chill Out in OpenGL"><figcaption>Chill Out, OpenGL</figcaption></figure>
+		<figure><img loading="lazy" src="screenshots/hangemhigh-direct3d.jpg" alt="Hang 'Em High in Direct3D 8"><figcaption>Hang 'Em High, Direct3D 8</figcaption></figure>
+	</div>
+</section>
+
+<section id="install">
+	<h2>Install</h2>
+	<p>About five minutes, plus copying the maps.</p>
+	<div class="rule"></div>
+	<ol class="steps">
+		<li><h3>Download the release</h3>
+			<p>Get <code>halo-dos-&lt;version&gt;.zip</code> from the <a href="https://github.com/JackTulli/halo-dos/releases/latest">latest release</a> and unpack it. Everything is in its <code>HALO</code> folder: <code>HALO.EXE</code> for DOS, <code>HALO95.EXE</code> for Windows, the launchers and the manual (<code>README.TXT</code>).</p></li>
+		<li><h3>Add your Xbox maps</h3>
+			<p>Copy the 24 <code>.map</code> files from the <code>maps</code> folder of your Halo: Combat Evolved <b>Xbox</b> disc into <code>HALO\MAPS</code>. From a disc image, use an Xbox image tool such as <a href="https://github.com/XboxDev/extract-xiso">extract-xiso</a>; if you play ChupathingyCE, its <code>maps</code> folder holds the same files. Halo PC's maps don't work here.</p>
+			<p>Optional: Halo Custom Edition's <code>maps</code> folder goes in <code>HALO\MAPS_CE</code>, for CE servers and CE maps.</p></li>
+		<li><h3>Run it on Windows</h3>
+			<p>Run <code>RUN-WIN95.BAT</code> or <code>HALO95.EXE</code> (Windows 95 to 11). Alt+Enter switches between a window and full screen. Windows 95 needs Windows' TCP/IP installed (Control Panel → Network).</p></li>
+		<li><h3>…or on DOS</h3>
+			<p>On a DOS machine: load your mouse driver (and your network card's packet driver, for online play), then run <code>PLAY</code>. On a PC, install <a href="https://dosbox-x.com">DOSBox-X</a> and run <code>RUN-DOS.BAT</code>; unpack DOSBox-X's MinGW portable build into a <code>DOSBox-X</code> folder beside the game for networking.</p></li>
+	</ol>
+</section>
+
+<section id="requirements">
+	<h2>What it needs</h2>
+	<div class="rule"></div>
+	<div class="table-wrap">
+		<table>
+			<tr><th></th><th>DOS (HALO.EXE)</th><th>Windows (HALO95.EXE)</th></tr>
+			<tr><td>Processor</td><td>A Pentium with an FPU; 133 MHz plays at 320x200, faster is better</td><td>A Pentium or later</td></tr>
+			<tr><td>Memory</td><td>64 MB (what it was tested with)</td><td>64 MB</td></tr>
+			<tr><td>System</td><td>MS-DOS 6.22 or 7.x; Windows 9x's MS-DOS mode; DOSBox-X</td><td>Windows 95 with TCP/IP, 98, Me, or any later Windows</td></tr>
+			<tr><td>Display</td><td>VGA for 320x200 in 256 colours; VESA 2.0 with a linear frame buffer for more; a Voodoo Graphics</td><td>Any; OpenGL 1.1 or DirectX 8.0a for the card renderers</td></tr>
+			<tr><td>Sound</td><td>Sound Blaster or compatible (optional)</td><td>Any wave-out device (optional)</td></tr>
+			<tr><td>Network</td><td>A packet driver (optional)</td><td>Winsock (optional)</td></tr>
+			<tr><td>Disk</td><td>About 2 GB of maps, plus the unpacked map cache</td><td>The same</td></tr>
+		</table>
+	</div>
+</section>
+
+<section id="online">
+	<h2>Online</h2>
+	<p>MULTIPLAYER → ONLINE: Quick Join, Browse Games, Host a Game, and Players for split screen online.</p>
+	<div class="rule"></div>
+	<div class="grid two">
+		<div class="card"><h3>With ChupathingyCE and OpenCE</h3><p>Their online game list is this game's too: its players can join your games and you theirs. Hosted games write an invite link to <code>INVITE.TXT</code>; a link put in <code>JOIN.TXT</code> joins that game at start.</p></div>
+		<div class="card"><h3>Halo Custom Edition servers</h3><p>CE 1.10 servers appear in the list. With Custom Edition's <code>bitmaps.map</code>, <code>sounds.map</code> and <code>loc.map</code> in <code>MAPS_CE</code>, joining downloads a server's missing map. Servers that check CD keys refuse this game.</p></div>
+	</div>
+</section>
+
+<section id="build">
+	<h2>Build it yourself</h2>
+	<p>On Windows 10 or 11, with LLVM, Open Watcom 1.9, nxdk's PDCLib sources, a Windows SDK, Python and Ninja.
+	The <a href="https://github.com/JackTulli/halo-dos#building-from-source">README</a> has the details.</p>
+	<div class="rule"></div>
+<pre>git config --global core.longpaths true
+git clone --recursive https://github.com/JackTulli/halo-dos
+cd halo-dos
+python tools/dos_hooks.py
+python tools/dos_build.py
+ninja -f build/dos/build.ninja dos win95 launchers</pre>
+</section>
+
+</main>
+
+<footer>
+	<div class="wrap">
+		<p>Halo for MS-DOS and Windows 95 is free software under the GNU GPL version 3, built on
+		<a href="https://github.com/ChupathingyCE/chupathingyce">ChupathingyCE</a>. It also uses mTCP, DOS/32 Advanced DOS Extender,
+		Zstandard, musl, PDCLib, KCP and Monocypher. This product uses DOS/32 Advanced DOS Extender technology.</p>
+		<p>Halo: Combat Evolved is © Microsoft. This project is not affiliated with Microsoft, Bungie or 343 Industries
+		and contains none of the game's data.</p>
+		<p><a href="https://github.com/JackTulli/halo-dos">github.com/JackTulli/halo-dos</a> ·
+		<a href="https://github.com/JackTulli/halo-dos/issues">Report a problem</a></p>
+	</div>
+</footer>
+
+<script>
+(function () {
+	var captions = {
+		"256": "Software renderer at 320x200 in 256 colours: DOS's default, shown four times larger.",
+		"software": "Software renderer at 1280x720 in full colour: the processor draws every pixel, as on DOS.",
+		"opengl": "OpenGL at 1280x720: the graphics card draws, with Halo's detail maps up close.",
+		"direct3d": "Direct3D 8 at 1280x720 with the Xbox look: Halo's lightmaps, lit objects and texture pass."
+	};
+	var state = { scene: "b30", renderer: "direct3d" };
+	var image = document.getElementById("viewer-image");
+	var caption = document.getElementById("viewer-caption");
+	var names = { b30: "The Silent Cartographer", bloodgulch: "Blood Gulch", title: "the title" };
+
+	function show() {
+		var pixel = state.renderer === "256";
+		image.src = "screenshots/" + state.scene + "-" + state.renderer + (pixel ? ".png" : ".jpg");
+		image.className = pixel ? "pixel" : "";
+		image.alt = names[state.scene] + ", " + (pixel ? "256 colours" : state.renderer);
+		caption.textContent = captions[state.renderer];
+		document.querySelectorAll("[data-scene]").forEach(function (b) {
+			b.setAttribute("aria-pressed", b.dataset.scene === state.scene ? "true" : "false");
+		});
+		document.querySelectorAll("[data-renderer]").forEach(function (b) {
+			b.setAttribute("aria-pressed", b.dataset.renderer === state.renderer ? "true" : "false");
+		});
+	}
+	document.querySelectorAll("[data-scene]").forEach(function (b) {
+		b.addEventListener("click", function () { state.scene = b.dataset.scene; show(); });
+	});
+	document.querySelectorAll("[data-renderer]").forEach(function (b) {
+		b.addEventListener("click", function () { state.renderer = b.dataset.renderer; show(); });
+	});
+	/* (every picture fetched once, so switching is instant) */
+	["b30", "bloodgulch", "title"].forEach(function (s) {
+		["software", "opengl", "direct3d"].forEach(function (r) { new Image().src = "screenshots/" + s + "-" + r + ".jpg"; });
+		new Image().src = "screenshots/" + s + "-256.png";
+	});
+	show();
+})();
+</script>
+</body>
+</html>
