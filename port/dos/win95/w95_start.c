@@ -70,7 +70,7 @@ static void open_standard_streams(void)
 separate, quotes group */
 static char **make_argv(int *argc)
 {
-	static char *arguments[32];
+	static char *arguments[128];
 	const char *line = GetCommandLineA();
 	size_t length = line ? strlen(line) : 0;
 	char *text = malloc(length + 1), *cursor = text;

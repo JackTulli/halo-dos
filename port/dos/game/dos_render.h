@@ -57,7 +57,40 @@ struct dos_material
 	r_texture *layer;
 	float layer_scale[2];
 	unsigned long layer_tint;
+	/* the bitmaps its texture's bitmap tag holds: Halo draws a part with
+	the one its shader permutation picks, modulo this (the assault rifle's
+	display icons; 0: always the first) */
+	int bitmap_count;
+	/* a numeric shader's counter (Halo's numeric flag: the assault rifle's
+	ammo counter and compass): each part a digit of the object's value
+	times this, the bitmap that digit; 0 for others */
+	int numeric_limit;
+	/* a meter shader's (shader_transparent_meter: the plasma weapons'
+	gauges), worked out at each drawing (dos_meter_texture); NULL for others */
+	struct dos_meter *meter;
+	/* Halo's water on the card (Direct3D 8: r_draws_water): its ripples,
+	reflection and tints (dos_water.c); NULL for others */
+	struct dos_water *water;
 };
+
+/* the texture of a material's bitmap number frame (modulo its count) */
+r_texture *dos_material_frame(const struct dos_material *material, int frame);
+
+/* ---------- Halo's water on the card (dos_water.c; r_draws_water) */
+
+/* a water shader's (its tag and definition), NULL where it cannot be drawn
+so (the material then draws as an ordinary surface) */
+struct dos_water *dos_water_new(long shader_tag_index, const void *definition);
+/* a batch of its triangles: world vertices (u, v the base map's), each
+vertex's normal, binormal and tangent (nine floats a vertex), and the
+water's plane's normal */
+void dos_water_draw(const struct dos_material *material, const struct r_vertex *vertices, const float *frames,
+	int vertex_count, const unsigned short *indices, int triangle_count, const float *plane_normal);
+void dos_water_dispose(void);
+/* a meter material's texture for the object's animation values (its A to D
+functions; NULL: all 1), premultiplied: drawn R_DRAW_ADDITIVE |
+R_DRAW_PREMULTIPLIED; NULL if it cannot be made */
+r_texture *dos_meter_texture(const struct dos_material *material, const float *values);
 
 /* whether the level's surfaces have their detail maps drawn over them:
 TEXTURE QUALITY HIGH or ORIGINAL where the renderer can (OpenGL), unless

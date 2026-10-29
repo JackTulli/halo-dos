@@ -40,6 +40,7 @@ their normals.
 #include "dos_render.h"
 
 extern struct r_settings dos_render_settings;
+long dos_setting_integer(const char *name, long default_value);
 
 #include <math.h>
 #include <stdio.h>
@@ -484,6 +485,9 @@ static struct
 	/* the object's armour colour, for shaders that take it (dos_render_game.c
 	sets it before render_model) */
 	unsigned long change_color;
+	/* its animation values (its A to D functions: the weapons' ammunition
+	and heat, which their counters and gauges show), or NULL */
+	const real *values;
 	/* each node's matrix and the view's in one (rows right, up, ahead: the
 	node's axes and position in the view's space), made at the model's
 	first part: its vertices go straight into the view's space */
@@ -620,6 +624,7 @@ void rasterizer_model_begin(
 			model.light_directions[i][2] = lighting->distant_lights[i].direction.k;
 		}
 	}
+	model.values = parameters->animation.values;
 	model.base_map_scale = parameters->base_map_scale;
 	if (model.base_map_scale.i == 0.0f)
 		model.base_map_scale.i = 1.0f;
@@ -634,7 +639,43 @@ void rasterizer_model_end(void)
 }
 
 static void draw_geometry(const struct geometry *part, long shader_index, const struct dos_material *material,
-	int transparent_pass);
+	r_texture *texture, int transparent_pass);
+
+/* the texture a part draws with: its material's, or the bitmap its shader
+permutation picks (Halo's every shader: modulo the bitmaps), a numeric
+shader's digit (the assault rifle's counter: the part's permutation is the
+digit's place, the object's first function times the counter's limit the
+number; a compass of eight bitmaps, the fourth function), or a meter's
+texture for the object's values */
+static r_texture *part_texture(const struct dos_material *material, short permutation)
+{
+	if (material->meter)
+	{
+		/* (testing, setting debug_meters=1: the values each meter draws with) */
+		if (model.values && dos_setting_integer("debug_meters", 0))
+		{
+			char line[120];
+
+			snprintf(line, sizeof(line), "meter part: values %.3f %.3f %.3f %.3f", (double)model.values[0],
+				(double)model.values[1], (double)model.values[2], (double)model.values[3]);
+			system_log(line);
+		}
+		return dos_meter_texture(material, model.values);
+	}
+	if (material->numeric_limit && material->bitmap_count > 0 && model.values)
+	{
+		int count = material->bitmap_count;
+		long value = (long)floorf((float)material->numeric_limit * model.values[count == 8 ? 3 : 0] + 0.5f);
+
+		value = value < 0 ? 0 : value > material->numeric_limit ? material->numeric_limit : value;
+		for (int digit = 0; digit < permutation; digit++)
+			value /= count;
+		return dos_material_frame(material, (int)(value % count));
+	}
+	if (material->bitmap_count > 1 && permutation > 0)
+		return dos_material_frame(material, permutation);
+	return material->texture;
+}
 
 /* a vertex's light, 0 up (its channel times the armour's), to the integer
 below as a cast takes it, without the cast's two loads of the x87's
@@ -657,8 +698,8 @@ static __inline__ unsigned long channel_byte(float value)
 	return (unsigned long)result;
 }
 
-static void draw_part(struct shader *shader, struct triangle_buffer const *triangle_buffer, long triangle_count,
-	struct vertex_buffer const *vertex_buffer, int transparent_pass)
+static void draw_part(struct shader *shader, short permutation, struct triangle_buffer const *triangle_buffer,
+	long triangle_count, struct vertex_buffer const *vertex_buffer, int transparent_pass)
 {
 	long shader_index = NONE;
 	const struct dos_material *material;
@@ -674,7 +715,16 @@ static void draw_part(struct shader *shader, struct triangle_buffer const *trian
 	}
 	material = dos_shader_material(shader_index);
 	if (material->skip)
+	{
+		if (logging_parts())
+		{
+			char line[160];
+
+			snprintf(line, sizeof(line), "part left out: %s", shader_index != NONE ? tag_get_name(shader_index) : "none");
+			system_log(line);
+		}
 		return;
+	}
 	if (!material->texture)
 	{
 		/* (testing, setting debug_untextured=1: which shaders draw bare) */
@@ -727,17 +777,16 @@ static void draw_part(struct shader *shader, struct triangle_buffer const *trian
 			if (copy)
 				geometry = *copy;
 		}
-		draw_geometry(&geometry, shader_index, material, transparent_pass);
+		draw_geometry(&geometry, shader_index, material, part_texture(material, permutation), transparent_pass);
 	}
 }
 
 /* a part's geometry put in the view and drawn */
 static void draw_geometry(const struct geometry *part, long shader_index, const struct dos_material *material,
-	int transparent_pass)
+	r_texture *texture, int transparent_pass)
 {
 	float u_scale, v_scale;
 	unsigned long color;
-	r_texture *texture;
 	int lit;
 	float change[3];
 
@@ -773,8 +822,8 @@ static void draw_geometry(const struct geometry *part, long shader_index, const 
 	}
 	u_scale = model.base_map_scale.i * material->u_scale;
 	v_scale = model.base_map_scale.j * material->v_scale;
-	color = model.color;
-	texture = material->texture;
+	/* (Halo's transparent shaders take no light: glows, displays, gauges) */
+	color = material->transparent ? 0x808080 : model.color;
 	if (material->change_color && model.change_color && dos_render_settings.bits == 8)
 	{
 		/* (the 8-bit picture's light is monochrome: a tinted copy) */
@@ -789,7 +838,7 @@ static void draw_geometry(const struct geometry *part, long shader_index, const 
 	}
 	/* (lit at each vertex: the Xbox's look, where the part has its normals;
 	the armour's colour times each vertex's light, 128 its 1) */
-	lit = model.lit && part->normals;
+	lit = model.lit && part->normals && !material->transparent;
 	change[0] = change[1] = change[2] = 128.0f;
 	if (lit && material->change_color && model.change_color && dos_render_settings.bits != 8)
 	{
@@ -910,10 +959,9 @@ void rasterizer_model_draw(
 	struct vertex_buffer const *vertex_buffer,
 	long dynamic_vertex_buffer_index)
 {
-	(void)shader_permutation_index;
 	(void)dynamic_triangle_buffer_index;
 	(void)dynamic_vertex_buffer_index;
-	draw_part(shader, triangle_buffer, triangle_count, vertex_buffer, FALSE);
+	draw_part(shader, shader_permutation_index, triangle_buffer, triangle_count, vertex_buffer, FALSE);
 }
 
 void rasterizer_model_transparent_geometry_submit(
@@ -927,14 +975,13 @@ void rasterizer_model_transparent_geometry_submit(
 	union real_point3d const *centroid,
 	struct render_sort_filth *sort_filth)
 {
-	(void)shader_permutation_index;
 	(void)dynamic_triangle_buffer_index;
 	(void)dynamic_vertex_buffer_index;
 	(void)centroid;
 	/* (drawn now, unsorted: no group for models.c to link) */
 	if (sort_filth)
 		sort_filth->group_index = NONE;
-	draw_part(shader, triangle_buffer, triangle_count, vertex_buffer, TRUE);
+	draw_part(shader, shader_permutation_index, triangle_buffer, triangle_count, vertex_buffer, TRUE);
 }
 
 void rasterizer_environment_shadow_model_begin(struct rasterizer_model_begin_parameters const *parameters)

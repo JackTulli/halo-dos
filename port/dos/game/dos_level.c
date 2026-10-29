@@ -83,6 +83,11 @@ struct batch
 	floats each), or 0 and NULL: the vertices' colours are the light */
 	unsigned long lightmap;
 	float *lightmap_coordinates;
+	/* Halo's water on the card (dos_water.c): each vertex's normal, binormal
+	and tangent (nine floats), and the water's plane's normal; NULL where its
+	material is not water */
+	float *frames;
+	float plane[3];
 	/* its coarse copy, drawn past the distant geometry's distance (NULL
 	where it would save little: build_coarse_batches) */
 	struct r_vertex *coarse_vertices;
@@ -898,6 +903,8 @@ struct source_material
 	or 0 and NULL (the vertices' colours are their light) */
 	unsigned long lightmap;
 	float *lightmap_coordinates;
+	/* water's: each vertex's normal, binormal and tangent (struct batch's) */
+	float *frames;
 	long vertex_count;
 	long first_surface, surface_count;
 };
@@ -1017,11 +1024,14 @@ static void add_batches(const struct structure_bsp *bsp, const struct source_mat
 				if (batch->lightmap_coordinates)
 					batch->lightmap = source->lightmap;
 			}
+			if (source->frames)
+				batch->frames = raw_malloc((size_t)triangles * 3 * 9 * sizeof(float));
 			if (!batch->indices || !batch->vertices)
 			{
 				raw_free(batch->indices);
 				raw_free(batch->vertices);
 				raw_free(batch->lightmap_coordinates);
+				raw_free(batch->frames);
 				level.batch_count--;
 				goto out;
 			}
@@ -1048,6 +1058,8 @@ static void add_batches(const struct structure_bsp *bsp, const struct source_mat
 							batch->lightmap_coordinates[batch->vertex_count * 2 + 1] =
 								source->lightmap_coordinates[v * 2 + 1];
 						}
+						if (batch->frames)
+							memcpy(&batch->frames[batch->vertex_count * 9], &source->frames[v * 9], 9 * sizeof(float));
 						batch->vertices[batch->vertex_count++] = source->vertices[v];
 					}
 					batch->indices[batch->triangle_count * 3 + k] = (unsigned short)vertex_map[v];
@@ -1066,6 +1078,22 @@ static void add_batches(const struct structure_bsp *bsp, const struct source_mat
 				batch->center[k] = (low[k] + high[k]) * 0.5f;
 			batch->radius = 0.5f * sqrtf((high[0] - low[0]) * (high[0] - low[0]) +
 				(high[1] - low[1]) * (high[1] - low[1]) + (high[2] - low[2]) * (high[2] - low[2]));
+			/* (water's plane: its vertices' normals' mean) */
+			if (batch->frames)
+			{
+				float length;
+
+				batch->plane[0] = batch->plane[1] = batch->plane[2] = 0.0f;
+				for (int v = 0; v < batch->vertex_count; v++)
+				{
+					for (int k = 0; k < 3; k++)
+						batch->plane[k] += batch->frames[v * 9 + k];
+				}
+				length = sqrtf(batch->plane[0] * batch->plane[0] + batch->plane[1] * batch->plane[1] +
+					batch->plane[2] * batch->plane[2]);
+				for (int k = 0; k < 3; k++)
+					batch->plane[k] = length > 1e-6f ? batch->plane[k] / length : (k == 2 ? 1.0f : 0.0f);
+			}
 			/* (testing, setting debug_light: where the water and glass are) */
 			if (batch->material->transparent && dos_setting_integer("debug_light", 0))
 			{
@@ -1148,6 +1176,7 @@ static void decode_material(const struct structure_bsp *bsp, const struct struct
 	out->lights = NULL;
 	out->lightmap = 0;
 	out->lightmap_coordinates = NULL;
+	out->frames = NULL;
 	if (!data || count <= 0 || count > 32767)
 		return;
 	if (material->compressed_vertex_data.size < count * RENDERED_VERTEX_SIZE)
@@ -1164,6 +1193,10 @@ static void decode_material(const struct structure_bsp *bsp, const struct struct
 		if (out->lightmap_coordinates)
 			out->lightmap = lightmap;
 	}
+	/* (Halo's water on the card: each vertex's frame, which turns the
+	ripples' normals into the world) */
+	if (out->material->water && out->vertices)
+		out->frames = raw_malloc((size_t)count * 9 * sizeof(float));
 	for (long v = 0; v < count; v++)
 	{
 		const byte *rendered = data + v * RENDERED_VERTEX_SIZE;
@@ -1174,6 +1207,12 @@ static void decode_material(const struct structure_bsp *bsp, const struct struct
 
 		memcpy(vertex->position, rendered, 12);
 		unpack_normal(*(const unsigned long *)(rendered + 12), normal);
+		if (out->frames)
+		{
+			memcpy(&out->frames[v * 9], normal, sizeof(normal));
+			unpack_normal(*(const unsigned long *)(rendered + 16), &out->frames[v * 9 + 3]);
+			unpack_normal(*(const unsigned long *)(rendered + 20), &out->frames[v * 9 + 6]);
+		}
 		memcpy(&vertex->u, rendered + 24, 4);
 		memcpy(&vertex->v, rendered + 28, 4);
 		if (unlit)
@@ -1413,6 +1452,7 @@ done:
 	{
 		raw_free(materials[m].vertices);
 		raw_free(materials[m].lightmap_coordinates);
+		raw_free(materials[m].frames);
 	}
 	raw_free(materials);
 	raw_free(surface_material);
@@ -1463,6 +1503,7 @@ void dos_level_unload(void)
 		raw_free(level.batches[i].detail_vertices[0]);
 		raw_free(level.batches[i].detail_vertices[1]);
 		raw_free(level.batches[i].lightmap_coordinates);
+		raw_free(level.batches[i].frames);
 		if (level.batches[i].tile_size)
 		{
 			r_texture_delete(level.batches[i].texture);
@@ -1625,6 +1666,13 @@ static void draw_xbox_detail(const struct batch *batch, int coarse)
 
 static void draw_batch(const struct batch *batch, int coarse)
 {
+	/* (Halo's water on the card: its ripples, reflection and tints) */
+	if (batch->frames && batch->material->water)
+	{
+		dos_water_draw(batch->material, batch->vertices, batch->frames, batch->vertex_count, batch->indices,
+			batch->triangle_count, batch->plane);
+		return;
+	}
 	if (coarse)
 	{
 		r_draw_triangles(batch->coarse_vertices, batch->coarse_vertex_count, batch->coarse_indices,

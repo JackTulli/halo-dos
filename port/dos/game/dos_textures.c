@@ -109,6 +109,9 @@ static int texel_kind(short format, int *bytes, int *block)
 	case _format_dxt1: *bytes = 0; *block = 8; return _texture_kind_dxt1;
 	case _format_dxt3: *bytes = 0; *block = 16; return _texture_kind_dxt3;
 	case _format_dxt5: *bytes = 0; *block = 16; return _texture_kind_dxt5;
+	/* (Halo's bump maps: an index each into its vector palette,
+	global_vector_palette, the Xbox's shared palette) */
+	case _format_p8_bump: *bytes = 1; return _texture_kind_p8;
 	default: *bytes = 0; return _texture_kind_unknown;
 	}
 }
@@ -225,7 +228,8 @@ static unsigned long *decode(struct bitmap_data *bitmap, int face, int largest, 
 			(unsigned long)width, (unsigned long)height, 1,
 			/* (Halo PC's bitmaps are never swizzled: ChupathingyCE reads a Custom
 			Edition map's all in rows) */
-			(bitmap->flags & BITMAP_FLAG_SWIZZLED) && !cache_file_tags_are_ce() ? 0 : (unsigned long)width * bytes, NULL);
+			(bitmap->flags & BITMAP_FLAG_SWIZZLED) && !cache_file_tags_are_ce() ? 0 : (unsigned long)width * bytes,
+			kind == _texture_kind_p8 ? global_vector_palette : NULL);
 	}
 	raw_free(source);
 	/* (a Custom Edition map's HUD meter keeps its shape in its colour and the
@@ -444,6 +448,14 @@ unsigned long *dos_bitmap_tag_decode(long bitmap_tag_index, short bitmap_index, 
 	struct bitmap_data *bitmap = bitmap_of(bitmap_tag_index, bitmap_index);
 
 	return bitmap ? dos_bitmap_decode(bitmap, largest, width, height) : NULL;
+}
+
+/* a cube map's face (+x -x +y -y +z -z) decoded, as dos_bitmap_tag_decode */
+unsigned long *dos_bitmap_tag_decode_face(long bitmap_tag_index, int face, int largest, int *width, int *height)
+{
+	struct bitmap_data *bitmap = bitmap_of(bitmap_tag_index, 0);
+
+	return bitmap ? decode(bitmap, face, largest, width, height) : NULL;
 }
 
 /* a detail map for the detail pass (dos_level.c): each channel times 0x80
@@ -956,8 +968,10 @@ static void transparent_material(struct dos_material *material, long bitmap_tag_
 		}
 		break;
 	}
-	material->texture = dos_bitmap_texture(bitmap_tag_index, 0, alpha_tested ? R_TEXTURE_ALPHA_TEST :
-		(material->flags & R_DRAW_ALPHA) ? R_TEXTURE_ALPHA : 0);
+	material->texture_flags = alpha_tested ? R_TEXTURE_ALPHA_TEST : (material->flags & R_DRAW_ALPHA) ? R_TEXTURE_ALPHA : 0;
+	material->texture = dos_bitmap_texture(bitmap_tag_index, 0, material->texture_flags);
+	material->bitmap_tag_index = bitmap_tag_index;
+	material->bitmap_count = dos_bitmap_tag_count(bitmap_tag_index);
 	material->flags |= R_DRAW_TWO_SIDED;
 }
 
@@ -1698,6 +1712,245 @@ static int xbox_texture_pass(const byte *shader, struct bitmap_data *base_bitmap
 	return TRUE;
 }
 
+/* ---------- meter shaders
+
+A meter shader (shader_transparent_meter: the plasma pistol's and rifle's
+gauges) draws its map where each texel's blue is its place along the meter
+and its alpha its shape: up to the meter's value in a gradient of two
+colours, the flash's colour over the end, the background's past it; the
+value, the brightnesses and the gradient are the object's functions (its A
+to D animation values). Halo's pixel program for it
+(rasterizer_xbox_transparent_geometry.c's, the HUD meter's four combiner
+stages with its two alphas swapped: the flash reaches from the flash
+extension, the value cuts the meter) is worked through here for every blue,
+then the map's texels, into a texture made again when the inputs change.
+
+The blend: plain, the picture times the tint's colour plus the result times
+the meter's brightness; tint mode 2, the picture times the result's alpha
+plus the result times the tint. The texture is premultiplied for one blend
+(the colour, plus the picture times one minus the alpha): mode 2's
+exactly, the plain one's with the tint's colour as a grey. */
+
+#define METERS 16
+
+struct dos_meter
+{
+	long shader_tag_index;
+	long map;
+	unsigned short flags;
+	/* gradient minimum, maximum, background, flash, tint */
+	float colors[5][3];
+	float meter_transparency, background_transparency;
+	/* the functions (1 to 4, 0 none) of the meter's brightness, the flash's,
+	the value, the gradient and the flash's extension */
+	short sources[5];
+	unsigned long *texels;
+	int width, height, decoded;
+	/* the texture last made, and the packed inputs it was made from */
+	r_texture *texture;
+	unsigned long key[6];
+};
+
+static struct dos_meter meters[METERS];
+static int meter_count;
+
+static void meters_dispose(void)
+{
+	for (int i = 0; i < meter_count; i++)
+	{
+		(free)(meters[i].texels);
+		r_texture_delete(meters[i].texture);
+	}
+	memset(meters, 0, sizeof(meters));
+	meter_count = 0;
+}
+
+static struct dos_meter *meter_new(long shader_tag_index, const byte *shader)
+{
+	struct dos_meter *meter;
+
+	for (int i = 0; i < meter_count; i++)
+	{
+		if (meters[i].shader_tag_index == shader_tag_index)
+			return &meters[i];
+	}
+	if (meter_count == METERS)
+		return NULL;
+	meter = &meters[meter_count++];
+	memset(meter, 0, sizeof(*meter));
+	meter->shader_tag_index = shader_tag_index;
+	meter->flags = (unsigned short)read_short(shader, 0x28);
+	meter->map = reference_index(shader, 0x4C);
+	for (int c = 0; c < 5; c++)
+	{
+		for (int k = 0; k < 3; k++)
+			meter->colors[c][k] = read_real(shader, 0x7C + c * 12 + k * 4);
+	}
+	meter->meter_transparency = read_real(shader, 0xB8);
+	meter->background_transparency = read_real(shader, 0xBC);
+	for (int s = 0; s < 5; s++)
+		meter->sources[s] = read_short(shader, 0xD8 + s * 2);
+	return meter;
+}
+
+/* a colour and an alpha as the game packs them for the pixel program
+(real_a_rgb_color_to_pixel32: each to a byte) */
+static unsigned long meter_pixel(float alpha, const float *rgb, float scale)
+{
+	float channels[4] = { alpha, rgb[0] * scale, rgb[1] * scale, rgb[2] * scale };
+	unsigned long result = 0;
+
+	for (int i = 0; i < 4; i++)
+	{
+		float value = channels[i] < 0.0f ? 0.0f : channels[i] > 1.0f ? 1.0f : channels[i];
+
+		result = (result << 8) | (unsigned long)(value * 255.0f + 0.5f);
+	}
+	return result;
+}
+
+static float meter_signed(float x)
+{
+	return x < -1.0f ? -1.0f : x > 1.0f ? 1.0f : x;
+}
+
+static float meter_unsigned(float x)
+{
+	return x < 0.0f ? 0.0f : x > 1.0f ? 1.0f : x;
+}
+
+static float meter_byte(unsigned long pixel, int shift)
+{
+	return (float)((pixel >> shift) & 0xFF) / 255.0f;
+}
+
+/* the pixel program for each blue: the colour before the shape, and the
+alpha it leaves (r0.a: the background's past the value, the tint's before);
+every value clamped to [-1, 1] between stages, as the combiners do */
+static void meter_program_model(const unsigned long *key, unsigned char color[256][3], unsigned char keep[256])
+{
+	unsigned long minimum = key[0], maximum = key[1], background = key[2], flash = key[3], tint = key[4];
+	int negative = (key[5] & 0x0004) != 0;
+
+	for (int b = 0; b < 256; b++)
+	{
+		float blue = (float)b / 255.0f;
+		/* stage 0: r0.a = 4 * 2 * max.a * blue, r0.b = 4 * (flash.a - blue) */
+		float r0a = meter_signed(4.0f * 2.0f * meter_byte(maximum, 24) * blue);
+		float r0b = meter_signed(4.0f * (meter_byte(flash, 24) - blue));
+		float lerp = meter_unsigned(r0a), reach, rgb[3];
+		int past;
+
+		/* stage 1: min to max by r0.a; r0.a = 1 - 2 * max(r0.b, 0) */
+		r0a = meter_signed(1.0f - 2.0f * meter_unsigned(r0b));
+		/* stage 2: the flash added (or taken away) by r0.a */
+		reach = meter_unsigned(r0a);
+		for (int c = 0; c < 3; c++)
+		{
+			int shift = 16 - 8 * c;
+			float value = meter_signed((1.0f - lerp) * meter_byte(minimum, shift) + lerp * meter_byte(maximum, shift));
+
+			rgb[c] = meter_signed(meter_unsigned(value) + reach * (negative ? -1.0f : 1.0f) * meter_byte(flash, shift));
+		}
+		/* r0.a = blue + 0.5 - min.a (the value); stage 3: past it (r0.a's
+		top bit), the background */
+		r0a = meter_signed(blue + 0.5f - meter_byte(minimum, 24));
+		past = r0a >= 0.5f;
+		for (int c = 0; c < 3; c++)
+		{
+			float value = past ? meter_byte(background, 16 - 8 * c) : meter_unsigned(rgb[c]);
+
+			color[b][c] = (unsigned char)(meter_unsigned(value) * 255.0f + 0.5f);
+		}
+		keep[b] = (unsigned char)(past ? background >> 24 : tint >> 24);
+	}
+}
+
+r_texture *dos_meter_texture(const struct dos_material *material, const float *values)
+{
+	struct dos_meter *meter = material->meter;
+	float inputs[5];
+	unsigned long key[6], *texels;
+	unsigned char color[256][3], keep[256];
+	int tint_mode_2;
+	float scale[3], tint_grey;
+
+	if (!meter)
+		return NULL;
+	/* (the meter's brightness, the flash's, the value, the gradient, the
+	flash's extension: 1 where no function gives them) */
+	for (int s = 0; s < 5; s++)
+		inputs[s] = values && meter->sources[s] >= 1 && meter->sources[s] <= 4 ? values[meter->sources[s] - 1] : 1.0f;
+	tint_mode_2 = (meter->flags & 0x0008) != 0;
+	{
+		float gradient = inputs[3] * 8.0f;
+		float flash[3] = { meter->colors[3][0] * inputs[1], meter->colors[3][1] * inputs[1], meter->colors[3][2] * inputs[1] };
+
+		key[0] = meter_pixel(inputs[2], meter->colors[0], 1.0f);
+		key[1] = meter_pixel(1.0f / (gradient > 1.0f ? gradient : 1.0f), meter->colors[1], 1.0f);
+		key[2] = meter_pixel(tint_mode_2 ? meter->background_transparency : 0.0f, meter->colors[2], 1.0f);
+		key[3] = meter_pixel(inputs[4], flash, 1.0f);
+		key[4] = tint_mode_2 ? meter_pixel(meter->meter_transparency, meter->colors[4], inputs[0]) :
+			meter_pixel(inputs[0], meter->colors[4], 1.0f);
+		key[5] = meter->flags;
+	}
+	if (meter->texture && !memcmp(key, meter->key, sizeof(key)))
+		return meter->texture;
+	if (!meter->decoded)
+	{
+		meter->decoded = TRUE;
+		meter->texels = dos_bitmap_tag_decode(meter->map, 0, texture_size() > 256 ? texture_size() : 256, &meter->width,
+			&meter->height);
+	}
+	if (!meter->texels)
+		return NULL;
+	texels = (malloc)((size_t)meter->width * meter->height * sizeof(*texels));
+	if (!texels)
+		return NULL;
+	meter_program_model(key, color, keep);
+	/* (the blend's source factor: mode 2 the tint's colour, else the tint's
+	alpha, the meter's brightness; the picture kept by the result's alpha,
+	or by the tint's colour, here its grey) */
+	for (int c = 0; c < 3; c++)
+		scale[c] = tint_mode_2 ? meter_byte(key[4], 16 - 8 * c) : meter_byte(key[4], 24);
+	tint_grey = (meter_byte(key[4], 16) + meter_byte(key[4], 8) + meter_byte(key[4], 0)) / 3.0f;
+	for (long i = 0; i < (long)meter->width * meter->height; i++)
+	{
+		unsigned long t = meter->texels[i], shape = t >> 24, place = t & 0xFF, out = 0;
+
+		/* (alpha 0 is killed: nothing drawn) */
+		if (shape)
+		{
+			unsigned long kept = tint_mode_2 ? keep[place] : (unsigned long)(tint_grey * 255.0f + 0.5f);
+
+			for (int c = 0; c < 3; c++)
+			{
+				float value = (float)color[place][c] * (float)shape / 255.0f * scale[c];
+
+				out = (out << 8) | (unsigned long)(value > 255.0f ? 255.0f : value + 0.5f);
+			}
+			out |= (255 - kept) << 24;
+		}
+		texels[i] = out;
+	}
+	r_texture_delete(meter->texture);
+	meter->texture = r_texture_new(texels, meter->width, meter->height, R_TEXTURE_ALPHA);
+	(free)(texels);
+	memcpy(meter->key, key, sizeof(key));
+	return meter->texture;
+}
+
+r_texture *dos_material_frame(const struct dos_material *material, int frame)
+{
+	r_texture *texture;
+
+	if (frame <= 0 || material->bitmap_count <= 1 || material->bitmap_tag_index == NONE)
+		return material->texture;
+	texture = dos_bitmap_texture(material->bitmap_tag_index, (short)(frame % material->bitmap_count),
+		material->texture_flags);
+	return texture ? texture : material->texture;
+}
+
 static void make_material(long shader_tag_index, struct dos_material *material)
 {
 	unsigned long group = tag_get_group_tag(shader_tag_index);
@@ -1817,6 +2070,7 @@ static void make_material(long shader_tag_index, struct dos_material *material)
 			alpha_tested ? R_TEXTURE_ALPHA_TEST : 0);
 		material->bitmap_tag_index = reference_index(shader, 0xA4);
 		material->texture_flags = alpha_tested ? R_TEXTURE_ALPHA_TEST : 0;
+		material->bitmap_count = dos_bitmap_tag_count(material->bitmap_tag_index);
 		if (flags & 0x0002)
 			material->flags |= R_DRAW_TWO_SIDED;
 		material->change_color = read_short(shader, 0x4C) != 0;
@@ -1867,9 +2121,10 @@ static void make_material(long shader_tag_index, struct dos_material *material)
 		{
 			char line[256];
 
-			snprintf(line, sizeof(line), "shader %s: type %d blend %d flags %02X, %ld maps, %ld extra layers",
-				tag_get_name(shader_tag_index), first_map_type, read_short(shader, 0x2C), *(shader + 0x29),
-				maps->count, ((const struct tag_block *)(shader + 0x48))->count);
+			snprintf(line, sizeof(line), "shader %s: type %d blend %d flags %02X numeric limit %d extra flags %04X, "
+				"%ld maps, %ld extra layers", tag_get_name(shader_tag_index), first_map_type, read_short(shader, 0x2C),
+				*(shader + 0x29), *(shader + 0x28), (unsigned)read_short(shader, 0x60), maps->count,
+				((const struct tag_block *)(shader + 0x48))->count);
 			system_log(line);
 			for (long m = 0; m < maps->count; m++)
 			{
@@ -1905,11 +2160,18 @@ static void make_material(long shader_tag_index, struct dos_material *material)
 			float su = read_real(map, 0x54), sv = read_real(map, 0x58);
 
 			transparent_material(material, reference_index(map, 0x6C), read_short(shader, 0x2C), alpha_tested);
+			/* (a numeric one's digits: the counter's limit, unless it is the
+			campaign's countdown timer, drawn with its first bitmap) */
+			if ((*(shader + 0x29) & 0x80) && !(read_short(shader, 0x60) & 0x0002))
+				material->numeric_limit = *(shader + 0x28);
 			/* (the first map's own tiling; a stack of maps, made into one) */
 			material->u_scale = su > 0.0f ? su : 1.0f;
 			material->v_scale = sv > 0.0f ? sv : 1.0f;
 			if (maps->count > 1 && !material->skip)
 			{
+				/* (the stack is one texture: no bitmap of its own a part) */
+				material->bitmap_count = 0;
+				material->numeric_limit = 0;
 				r_texture *stack = chicago_stack(maps, alpha_tested ? R_TEXTURE_ALPHA_TEST :
 					(material->flags & R_DRAW_ALPHA) ? R_TEXTURE_ALPHA : 0, &material->u_scale,
 					&material->v_scale, material);
@@ -1942,9 +2204,10 @@ static void make_material(long shader_tag_index, struct dos_material *material)
 			const struct tag_block *stages = (const struct tag_block *)(shader + 0x60);
 			char line[400];
 
-			snprintf(line, sizeof(line), "generic %s: flags %02X type %d blend %d fade %d source %d, %ld maps, %ld stages",
-				tag_get_name(shader_tag_index), *(shader + 0x29), read_short(shader, 0x2A), read_short(shader, 0x2C),
-				read_short(shader, 0x2E), read_short(shader, 0x30), maps->count, stages->count);
+			snprintf(line, sizeof(line), "generic %s: flags %02X numeric limit %d type %d blend %d fade %d source %d, "
+				"%ld maps, %ld stages", tag_get_name(shader_tag_index), *(shader + 0x29), *(shader + 0x28),
+				read_short(shader, 0x2A), read_short(shader, 0x2C), read_short(shader, 0x2E), read_short(shader, 0x30),
+				maps->count, stages->count);
 			system_log(line);
 			for (long m = 0; m < maps->count; m++)
 			{
@@ -1975,6 +2238,8 @@ static void make_material(long shader_tag_index, struct dos_material *material)
 
 			transparent_material(material, reference_index(map, 0x1C), read_short(shader, 0x2C),
 				(*(shader + 0x29) & 1) != 0);
+			if (*(shader + 0x29) & 0x80)
+				material->numeric_limit = *(shader + 0x28);
 			/* (its combiner stages on the card, where they are products: the
 			first map alone stands for them elsewhere) */
 			if (!material->skip && dos_xbox_detail())
@@ -2013,6 +2278,10 @@ static void make_material(long shader_tag_index, struct dos_material *material)
 		material->flags |= R_DRAW_ADDITIVE | R_DRAW_TWO_SIDED;
 		material->transparent = TRUE;
 		material->tint = water_tint(shader, material->texture);
+		/* (on a card that draws Halo's water: its ripples, reflection and
+		tints, dos_water.c; this texture the stand-in where it cannot) */
+		if (r_draws_water() && dos_setting_integer("d3d_water", 2) > 0)
+			material->water = dos_water_new(shader_tag_index, shader);
 		break;
 	case 'sgla':
 		/* glass: its diffuse map, half over */
@@ -2020,8 +2289,65 @@ static void make_material(long shader_tag_index, struct dos_material *material)
 		material->flags |= R_DRAW_BLEND | R_DRAW_TWO_SIDED;
 		material->transparent = TRUE;
 		break;
+	case 'smet':
+		/* meter: worked out at each drawing for the object's values
+		(dos_meter_texture), premultiplied, unlit, after the opaque */
+		material->meter = meter_new(shader_tag_index, shader);
+		if (!material->meter)
+		{
+			material->skip = TRUE;
+			break;
+		}
+		material->transparent = TRUE;
+		material->flags |= R_DRAW_ADDITIVE | R_DRAW_PREMULTIPLIED |
+			((read_short(shader, 0x28) & 0x0002) ? R_DRAW_TWO_SIDED : 0);
+		if (dos_setting_integer("debug_shaders", 0))
+		{
+			char line[400];
+			long map = reference_index(shader, 0x4C);
+
+			snprintf(line, sizeof(line), "meter %s: flags %04X map %s min %.2f %.2f %.2f max %.2f %.2f %.2f "
+				"background %.2f %.2f %.2f flash %.2f %.2f %.2f tint %.2f %.2f %.2f transparency %.2f %.2f "
+				"sources %d %d %d %d %d", tag_get_name(shader_tag_index), (unsigned)read_short(shader, 0x28),
+				map != NONE ? tag_get_name(map) : "none", (double)read_real(shader, 0x7C), (double)read_real(shader, 0x80),
+				(double)read_real(shader, 0x84), (double)read_real(shader, 0x88), (double)read_real(shader, 0x8C),
+				(double)read_real(shader, 0x90), (double)read_real(shader, 0x94), (double)read_real(shader, 0x98),
+				(double)read_real(shader, 0x9C), (double)read_real(shader, 0xA0), (double)read_real(shader, 0xA4),
+				(double)read_real(shader, 0xA8), (double)read_real(shader, 0xAC), (double)read_real(shader, 0xB0),
+				(double)read_real(shader, 0xB4), (double)read_real(shader, 0xB8), (double)read_real(shader, 0xBC),
+				read_short(shader, 0xD8), read_short(shader, 0xDA), read_short(shader, 0xDC), read_short(shader, 0xDE),
+				read_short(shader, 0xE0));
+			system_log(line);
+		}
+		break;
 	default:
-		/* plasma, meters: left out */
+		/* plasma: left out */
+		if (dos_setting_integer("debug_shaders", 0) && group == 'smet')
+		{
+			char line[400];
+			long map = reference_index(shader, 0x4C);
+
+			snprintf(line, sizeof(line), "meter %s: flags %04X map %s min %.2f %.2f %.2f max %.2f %.2f %.2f "
+				"background %.2f %.2f %.2f flash %.2f %.2f %.2f tint %.2f %.2f %.2f transparency %.2f %.2f "
+				"sources %d %d %d %d %d", tag_get_name(shader_tag_index), (unsigned)read_short(shader, 0x28),
+				map != NONE ? tag_get_name(map) : "none", (double)read_real(shader, 0x7C), (double)read_real(shader, 0x80),
+				(double)read_real(shader, 0x84), (double)read_real(shader, 0x88), (double)read_real(shader, 0x8C),
+				(double)read_real(shader, 0x90), (double)read_real(shader, 0x94), (double)read_real(shader, 0x98),
+				(double)read_real(shader, 0x9C), (double)read_real(shader, 0xA0), (double)read_real(shader, 0xA4),
+				(double)read_real(shader, 0xA8), (double)read_real(shader, 0xAC), (double)read_real(shader, 0xB0),
+				(double)read_real(shader, 0xB4), (double)read_real(shader, 0xB8), (double)read_real(shader, 0xBC),
+				read_short(shader, 0xD8), read_short(shader, 0xDA), read_short(shader, 0xDC), read_short(shader, 0xDE),
+				read_short(shader, 0xE0));
+			system_log(line);
+		}
+		else if (dos_setting_integer("debug_shaders", 0))
+		{
+			char line[200];
+
+			snprintf(line, sizeof(line), "shader left out: %s (%c%c%c%c)", tag_get_name(shader_tag_index),
+				(char)(group >> 24), (char)(group >> 16), (char)(group >> 8), (char)group);
+			system_log(line);
+		}
 		material->skip = TRUE;
 		break;
 	}
@@ -2593,6 +2919,8 @@ void dos_textures_dispose_from_old_map(void)
 		if (!shared)
 			r_texture_delete(texture);
 	}
+	meters_dispose();
+	dos_water_dispose();
 	texture_slot_count = 0;
 	material_slot_count = 0;
 }

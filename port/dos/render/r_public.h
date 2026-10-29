@@ -187,6 +187,10 @@ the vertices' grey is below 0xFF, their strength there */
 /* the vertices are in the view's own space already (x right, y up, z
 ahead of the eye: r_view_basis), not the world's */
 #define R_DRAW_VIEW_SPACE 0x20
+/* with R_DRAW_ADDITIVE: its texels premultiplied, the picture kept by one
+minus their alpha (Halo's meter shaders: the plasma weapons' gauges); the
+software and Voodoo rasterizers add them (the picture kept whole) */
+#define R_DRAW_PREMULTIPLIED 0x10000
 
 /* triangles of vertices (three indices each), transformed by matrix (4x3,
 column vectors forward, left, up and the position, as Halo's
@@ -262,6 +266,56 @@ unsigned long r_hardware_texture_new(unsigned long *const *levels, const int *wi
 	int alpha);
 void r_hardware_texture_delete(unsigned long texture);
 void r_set_detail_pass(const struct r_detail_pass *pass);
+/* a level of a card texture written again (0xAARRGGBB: an animated one,
+the water's ripples) */
+void r_hardware_texture_write(unsigned long texture, int level, const unsigned long *argb);
+/* a cube map on the card: six faces (+x -x +y -y +z -z, Direct3D's
+order and coordinates, the world's axes), each size texels a side, levels
+of them each (0xAARRGGBB, each level half the one before); 0 if it could
+not be made. Deleted as a texture. */
+unsigned long r_hardware_cube_new(unsigned long *const *faces[6], int size, int levels);
+
+/* ---------- Halo's water on the card (r_draws_water)
+
+Its reflection, as Halo's water shader (shader_transparent_water) makes
+it: a cube map seen in the surface, the surface's normal at each pixel
+from its ripples (a normal map, made again each frame from the shader's
+ripple layers), the reflection times a tint that goes from the shader's
+parallel tint (looking along the water) to its perpendicular one (looking
+straight down), mixed with the reflection to its eighth power (glints);
+added to what is under it, faded by the fog. Before it, where the shader
+says, the base map multiplies what is under the water. */
+struct r_water
+{
+	/* the ripples' normal map (r_hardware_texture_new, rewritten each frame)
+	and its coordinates: the vertices' times the scale plus the offset */
+	unsigned long bump;
+	float bump_scale[2], bump_offset[2];
+	/* its levels of detail moved by this (Halo's ripple mipmap bias) */
+	float bump_lod_bias;
+	/* the cube map reflected (r_hardware_cube_new) */
+	unsigned long reflection;
+	/* the tint by how squarely the surface is seen: 256 texels a row, from
+	along the water (0) to straight down (255); alpha the share of the
+	reflection added */
+	unsigned long tint;
+	/* the same for this draw as a whole (a card that works out the tint
+	once a draw: 0x00RRGGBB) */
+	unsigned long tint_color;
+	/* the base map (0: none), whose alpha the reflection is times (alpha)
+	and whose colour multiplies what is under the water first (multiply) */
+	unsigned long base;
+	int base_alpha, base_multiply;
+};
+
+/* 0: this renderer draws Halo's water as an ordinary transparent surface;
+1: as above, the tint once a draw (pixel shaders 1.1); 2: as above, the
+tint at each pixel by its ripple (pixel shaders 1.4) */
+int r_draws_water(void);
+/* water's triangles: world vertices (their u, v the base map's), and each
+vertex's normal, binormal and tangent (nine floats a vertex, the world's) */
+void r_draw_water(const struct r_water *water, const struct r_vertex *vertices, const float *frames, int vertex_count,
+	const unsigned short *indices, int triangle_count);
 
 /* ---------- the screen (the HUD, text, menus): in the picture's pixels */
 

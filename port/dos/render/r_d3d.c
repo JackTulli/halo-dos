@@ -529,6 +529,112 @@ static unsigned long d3d_hardware_texture_new(unsigned long *const *levels, cons
 	return (unsigned long)card;
 }
 
+static void d3d_hardware_texture_write(unsigned long texture, int level, const unsigned long *argb)
+{
+	if (!g.active || !texture || !argb)
+		return;
+	r_d3d_flush();
+	g.device.texture_write((struct r_d3d_texture *)texture, level, argb);
+}
+
+static unsigned long d3d_hardware_cube_new(unsigned long *const *faces[6], int size, int levels)
+{
+	struct r_d3d_texture *cube;
+
+	if (!g.active || !g.device.cube_new || !g.device.cube_write || size <= 0 || levels <= 0)
+		return 0;
+	r_d3d_flush();
+	cube = g.device.cube_new(size, levels);
+	for (int face = 0; cube && face < 6; face++)
+	{
+		for (int level = 0; level < levels; level++)
+		{
+			if (faces[face] && faces[face][level])
+				g.device.cube_write(cube, face, level, faces[face][level]);
+		}
+	}
+	return (unsigned long)cube;
+}
+
+static int d3d_draws_water(void)
+{
+	return g.active && g.device.draw_water ? g.device.water : 0;
+}
+
+/* Halo's water: each vertex into clip space as the triangles' are (no
+division: the card clips and divides), its sets for the card's program */
+static void d3d_water(const struct r_water *water, const struct r_water_vertex *vertices, int vertex_count,
+	const unsigned short *indices, int triangle_count)
+{
+	static struct r_d3d_water_vertex *out;
+	static int out_size;
+	struct r_d3d_water card;
+
+	if (!g.active || !g.device.draw_water || !g.device.water || !water->bump || !water->reflection || !water->tint)
+		return;
+	if (vertex_count > out_size)
+	{
+		struct r_d3d_water_vertex *grown = realloc(out, (size_t)vertex_count * sizeof(*grown));
+
+		if (!grown)
+			return;
+		out = grown;
+		out_size = vertex_count;
+	}
+	r_d3d_flush();
+	for (int i = 0; i < vertex_count; i++)
+	{
+		const struct r_water_vertex *v = &vertices[i];
+		struct r_d3d_water_vertex *o = &out[i];
+		const float *normal = &v->frame[0], *binormal = &v->frame[3], *tangent = &v->frame[6];
+
+		memset(o, 0, sizeof(*o));
+		o->x = (float)((double)v->xz * g.clip_x_scale + g.clip_x_offset * (double)v->z);
+		o->y = (float)((double)v->yz * g.clip_y_scale + g.clip_y_offset * (double)v->z);
+		o->z = v->z - g.z_near;
+		o->w = v->z;
+		o->color = (clamp_byte(v->fade * 255.0f) << 24) | 0xFFFFFFUL;
+		o->t0[0] = v->u * water->bump_scale[0] + water->bump_offset[0];
+		o->t0[1] = v->v * water->bump_scale[1] + water->bump_offset[1];
+		o->t5[0] = v->u;
+		o->t5[1] = v->v;
+		if (g.device.water >= 2)
+		{
+			for (int k = 0; k < 3; k++)
+			{
+				o->t1[k] = v->eye[k];
+				o->t2[k] = tangent[k];
+				o->t3[k] = binormal[k];
+				o->t4[k] = normal[k];
+			}
+		}
+		else
+		{
+			/* (the rows of the matrix to the world, the eye's way in w) */
+			float *rows[3] = { o->t1, o->t2, o->t3 };
+
+			for (int k = 0; k < 3; k++)
+			{
+				rows[k][0] = tangent[k];
+				rows[k][1] = binormal[k];
+				rows[k][2] = normal[k];
+				rows[k][3] = v->eye[k];
+			}
+		}
+	}
+	memset(&card, 0, sizeof(card));
+	card.program = g.device.water;
+	card.bump = (struct r_d3d_texture *)water->bump;
+	card.reflection = (struct r_d3d_texture *)water->reflection;
+	card.tint = (struct r_d3d_texture *)water->tint;
+	card.base = (struct r_d3d_texture *)water->base;
+	card.bump_lod_bias = water->bump_lod_bias;
+	card.tint_color = water->tint_color;
+	card.base_alpha = water->base_alpha && water->base;
+	card.base_multiply = water->base_multiply && water->base;
+	g.device.draw_water(&card, out, (unsigned long)vertex_count, indices, (unsigned long)triangle_count * 3);
+}
+
 static void d3d_hardware_texture_delete(unsigned long texture)
 {
 	if (!g.active || !texture)
@@ -1211,7 +1317,7 @@ static void d3d_triangle(const struct r_raster_vertex *a, const struct r_raster_
 		state.blend = _r_d3d_blend_detail;
 	else if (flags & R_DRAW_ADDITIVE)
 	{
-		state.blend = _r_d3d_blend_add;
+		state.blend = (flags & R_DRAW_PREMULTIPLIED) ? _r_d3d_blend_premultiplied : _r_d3d_blend_add;
 	}
 	else if (flags & R_DRAW_BLEND)
 	{
@@ -1552,4 +1658,8 @@ static const struct r_backend d3d_backend =
 	d3d_detail_stages,
 	d3d_hardware_texture_new,
 	d3d_hardware_texture_delete,
+	d3d_hardware_texture_write,
+	d3d_hardware_cube_new,
+	d3d_draws_water,
+	d3d_water,
 };

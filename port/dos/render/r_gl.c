@@ -1160,7 +1160,7 @@ static void gl_triangle(const struct r_raster_vertex *a, const struct r_raster_v
 	if ((flags & R_DRAW_DETAIL) && texture)
 		state |= STATE_DETAIL | STATE_BLEND_DETAIL;
 	else if (flags & R_DRAW_ADDITIVE)
-		state |= STATE_BLEND_ADD;
+		state |= (flags & R_DRAW_PREMULTIPLIED) ? STATE_BLEND_PREMULTIPLIED : STATE_BLEND_ADD;
 	else if (flags & R_DRAW_BLEND)
 	{
 		state |= STATE_BLEND_ALPHA;

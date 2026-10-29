@@ -115,6 +115,42 @@ struct r_d3d_detail
 	unsigned char alpha_operations[R_D3D_DETAIL_STAGES];
 };
 
+/* Halo's water (r_public.h's r_water): a vertex in clip space; its colour
+(white, its alpha how much of it the fog leaves); the ripples' coordinates
+(t0); four sets of four (t1 to t4) as the water's program reads them; the
+base map's coordinates (t5). The programs (w95_d3d.c):
+	- 2, pixel shaders 1.4 (after ATI's ocean water program, as an MIT
+	  repository of it has it: github.com/mahmoudgalal/Irrlicht_Water_Shader):
+	  t1 the way to the eye, t2 to t4 the tangent, binormal and normal, all
+	  in the world; the ripple's normal turned into the world by them, the
+	  eye reflected in it into the cube map, the tint by how squarely it is
+	  seen (the tint texture), the reflection and its eighth power mixed by
+	  it, times its alpha and the base map's;
+	- 1, pixel shaders 1.1 (Halo's own: texm3x3vspec): t1 to t3 the rows of
+	  the matrix from the ripple's space to the world (tangent, binormal and
+	  normal's x, y, z) with the way to the eye in w; the tint once a draw. */
+struct r_d3d_water_vertex
+{
+	float x, y, z, w;
+	unsigned long color;
+	float t0[2];
+	float t1[4], t2[4], t3[4], t4[4];
+	float t5[2];
+};
+
+struct r_d3d_water
+{
+	int program;
+	struct r_d3d_texture *bump, *reflection, *tint, *base;
+	/* the ripples' level of detail bias (Halo's ripple mipmap bias) */
+	float bump_lod_bias;
+	/* program 1's tint (0x00RRGGBB) */
+	unsigned long tint_color;
+	/* the base map's alpha is the reflection's share (program 2), and its
+	colour multiplies what is under the water first */
+	int base_alpha, base_multiply;
+};
+
 /* what a texture's alpha holds: none, a cut-out's (0 or 255), anything */
 enum
 {
@@ -160,6 +196,13 @@ struct r_d3d_device
 	/* a rectangle of the back buffer as 0x00RRGGBB words (screenshots);
 	FALSE if it cannot be read */
 	int (*read_back)(int x, int y, int width, int height, unsigned long *rgb);
+	/* Halo's water: the program the card runs for it (0 none: drawn as an
+	ordinary surface), cube maps (deleted as textures), and its draw */
+	int water;
+	struct r_d3d_texture *(*cube_new)(int size, int levels);
+	void (*cube_write)(struct r_d3d_texture *cube, int face, int level, const unsigned long *argb);
+	void (*draw_water)(const struct r_d3d_water *water, const struct r_d3d_water_vertex *vertices,
+		unsigned long vertex_count, const unsigned short *indices, unsigned long index_count);
 };
 
 /* the card draws from now (the picture the r_frame's size, shown in the

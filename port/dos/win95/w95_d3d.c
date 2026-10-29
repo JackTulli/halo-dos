@@ -51,6 +51,8 @@ static void log_line(const char *format, ...)
 struct r_d3d_texture
 {
 	IDirect3DTexture8 *texture;
+	/* (a cube map's instead: texture NULL) */
+	IDirect3DCubeTexture8 *cube;
 	D3DFORMAT format;
 	int width, height, levels;
 };
@@ -105,6 +107,11 @@ static struct
 	/* (testing: an older card's limits, test_limits) */
 	int test_limits;
 	struct device_cache cache;
+	/* Halo's water: its vertex program, the pixel program it uses (water:
+	r_d3d.h's 2 or 1, 0 none), and a white texel where it has no base map */
+	DWORD water_vertex_shader, water_pixel_shader, pixel_shader;
+	int water;
+	struct r_d3d_texture *white;
 	/* testing (setting debug_d3d=1): the draws and calls a frame, and the
 	game thread's cycles outside Present and in it (Windows Vista's
 	QueryThreadCycleTime, where there is one), logged every 300 frames */
@@ -166,6 +173,94 @@ static const DWORD detail_function[] =
 	0x00000009, 0xe0010003, 0x90e40003, 0xa0e40006, /* dp4 oT3.x, v3, c6 */
 	0x00000009, 0xe0020003, 0x90e40003, 0xa0e40007, /* dp4 oT3.y, v3, c7 */
 	0x0000ffff
+};
+
+/* ---------- Halo's water (r_d3d.h's r_d3d_water): its vertex (struct
+r_d3d_water_vertex: v0 the position, v1 the colour, v2 to v7 the sets) and
+its programs, assembled by tools/d3d8_shader_tokens.py */
+
+static const DWORD water_declaration[] =
+{
+	D3DVSD_STREAM(0),
+	D3DVSD_REG(0, D3DVSDT_FLOAT4),
+	D3DVSD_REG(1, D3DVSDT_D3DCOLOR),
+	D3DVSD_REG(2, D3DVSDT_FLOAT2),
+	D3DVSD_REG(3, D3DVSDT_FLOAT4),
+	D3DVSD_REG(4, D3DVSDT_FLOAT4),
+	D3DVSD_REG(5, D3DVSDT_FLOAT4),
+	D3DVSD_REG(6, D3DVSDT_FLOAT4),
+	D3DVSD_REG(7, D3DVSDT_FLOAT2),
+	D3DVSD_END()
+};
+
+static const DWORD water_vertex_function[] =
+{
+	0xfffe0101, /* vs.1.1 */
+	0x00000001, 0xc00f0000, 0x90e40000, /* mov oPos, v0 */
+	0x00000001, 0xd00f0000, 0x90e40001, /* mov oD0, v1 */
+	0x00000001, 0xe00f0000, 0x90e40002, /* mov oT0, v2 */
+	0x00000001, 0xe00f0001, 0x90e40003, /* mov oT1, v3 */
+	0x00000001, 0xe00f0002, 0x90e40004, /* mov oT2, v4 */
+	0x00000001, 0xe00f0003, 0x90e40005, /* mov oT3, v5 */
+	0x00000001, 0xe00f0004, 0x90e40006, /* mov oT4, v6 */
+	0x00000001, 0xe00f0005, 0x90e40007, /* mov oT5, v7 */
+	0x0000ffff, /* end */
+};
+
+/* program 2, pixel shaders 1.4: ATI's ocean water program's way (the
+ripple's normal into the world by the surface's frame, the eye reflected in
+it into the cube map, the tint by how squarely it is seen from a texture),
+with Halo's water's own mix: the reflection times the tint plus its eighth
+power times one minus it (glints), times the tint's alpha and the base
+map's, times what the fog leaves (the colour's alpha). Stages: 0 the
+ripples' normal map, 1 the cube map, 2 the tint, 5 the base map. */
+static const DWORD water_pixel_14[] =
+{
+	0xffff0104, /* ps.1.4 */
+	0x00000042, 0x800f0000, 0xb0e40000, /* texld r0, t0 */
+	0x00000040, 0x80070001, 0xb0e40001, /* texcrd r1.rgb, t1 */
+	0x00000040, 0x80070002, 0xb0e40002, /* texcrd r2.rgb, t2 */
+	0x00000040, 0x80070003, 0xb0e40003, /* texcrd r3.rgb, t3 */
+	0x00000040, 0x80070004, 0xb0e40004, /* texcrd r4.rgb, t4 */
+	0x00000005, 0x80070002, 0x80e40002, 0x84000000, /* mul r2.rgb, r2, r0_bx2.r */
+	0x00000004, 0x80070002, 0x80e40003, 0x84550000, 0x80e40002, /* mad r2.rgb, r3, r0_bx2.g, r2 */
+	0x00000004, 0x80070002, 0x80e40004, 0x84aa0000, 0x80e40002, /* mad r2.rgb, r4, r0_bx2.b, r2 */
+	0x00000008, 0x80070003, 0x80e40002, 0x80e40001, /* dp3 r3.rgb, r2, r1 */
+	0x00000004, 0x80070001, 0x80e40002, 0x87e40003, 0x81e40001, /* mad r1.rgb, r2, r3_x2, -r1 */
+	0x00000001, 0x80170000, 0x80e40003, /* mov_sat r0.rgb, r3 */
+	0x0000fffd, /* phase */
+	0x00000042, 0x800f0001, 0x80a40001, /* texld r1, r1.xyz */
+	0x00000042, 0x800f0002, 0x80a40000, /* texld r2, r0.xyz */
+	0x00000042, 0x800f0005, 0xb0e40005, /* texld r5, t5 */
+	0x00000005, 0x80070003, 0x80e40001, 0x80e40001, /* mul r3.rgb, r1, r1 */
+	0x40000005, 0x80080005, 0x80ff0002, 0x80ff0005, /* +mul r5.a, r2.a, r5.a */
+	0x00000005, 0x80070003, 0x80e40003, 0x80e40003, /* mul r3.rgb, r3, r3 */
+	0x00000005, 0x80070003, 0x80e40003, 0x80e40003, /* mul r3.rgb, r3, r3 */
+	0x00000012, 0x80070000, 0x80e40002, 0x80e40001, 0x80e40003, /* lrp r0.rgb, r2, r1, r3 */
+	0x00000005, 0x80070000, 0x80e40000, 0x80ff0005, /* mul r0.rgb, r0, r5.a */
+	0x00000005, 0x80070000, 0x80e40000, 0x90ff0000, /* mul r0.rgb, r0, v0.a */
+	/* (r0's alpha is the last phase's to write: the phase leaves none) */
+	0x00000001, 0x80080000, 0x80ff0005, /* mov r0.a, r5.a */
+	0x0000ffff, /* end */
+};
+
+/* program 1, pixel shaders 1.1: Halo's own (rasterizer_xbox_water.c's
+reflection pass): texm3x3vspec, the reflection times the draw's tint (c0)
+plus its eighth power times one minus it, times what the fog leaves.
+Stages: 0 the ripples' normal map, 3 the cube map. */
+static const DWORD water_pixel_11[] =
+{
+	0xffff0101, /* ps.1.1 */
+	0x00000042, 0xb00f0000, /* tex t0 */
+	0x00000049, 0xb00f0001, 0xb4e40000, /* texm3x3pad t1, t0_bx2 */
+	0x00000049, 0xb00f0002, 0xb4e40000, /* texm3x3pad t2, t0_bx2 */
+	0x0000004d, 0xb00f0003, 0xb4e40000, /* texm3x3vspec t3, t0_bx2 */
+	0x00000005, 0x800f0001, 0xb0e40003, 0xb0e40003, /* mul r1, t3, t3 */
+	0x00000005, 0x800f0001, 0x80e40001, 0x80e40001, /* mul r1, r1, r1 */
+	0x00000005, 0x800f0001, 0x80e40001, 0x80e40001, /* mul r1, r1, r1 */
+	0x00000012, 0x800f0000, 0xa0e40000, 0xb0e40003, 0x80e40001, /* lrp r0, c0, t3, r1 */
+	0x00000005, 0x800f0000, 0x80e40000, 0x90ff0000, /* mul r0, r0, v0.a */
+	0x0000ffff, /* end */
 };
 
 /* ---------- what the device is given (through the cache) */
@@ -255,11 +350,14 @@ static struct r_d3d_texture *texture_new(int width, int height, int levels, int 
 	return texture;
 }
 
+/* a locked level's rows from 0xAARRGGBB texels, in the texture's format */
+static void write_rows(const struct r_d3d_texture *texture, const D3DLOCKED_RECT *locked_rect,
+	const unsigned long *argb, int width, int height);
+
 /* a level's texels from 0xAARRGGBB, in the texture's format */
 static void texture_write(struct r_d3d_texture *texture, int level, const unsigned long *argb)
 {
-	int width = texture->width >> level ? texture->width >> level : 1;
-	int height = texture->height >> level ? texture->height >> level : 1;
+	int width, height;
 	D3DLOCKED_RECT locked;
 
 	if (!texture || !texture->texture ||
@@ -267,6 +365,55 @@ static void texture_write(struct r_d3d_texture *texture, int level, const unsign
 	{
 		return;
 	}
+	width = texture->width >> level ? texture->width >> level : 1;
+	height = texture->height >> level ? texture->height >> level : 1;
+	write_rows(texture, &locked, argb, width, height);
+	IDirect3DTexture8_UnlockRect(texture->texture, level);
+}
+
+/* a cube map (Halo's water's reflection), in the formats the textures take */
+static struct r_d3d_texture *cube_new(int size, int levels)
+{
+	struct r_d3d_texture *cube = calloc(1, sizeof(*cube));
+
+	if (!cube || !d3d.device || !(d3d.caps.TextureCaps & D3DPTEXTURECAPS_CUBEMAP))
+	{
+		free(cube);
+		return NULL;
+	}
+	cube->format = d3d.formats[_r_d3d_alpha_none];
+	cube->width = cube->height = size;
+	cube->levels = levels;
+	if (FAILED(IDirect3DDevice8_CreateCubeTexture(d3d.device, (UINT)size, (UINT)levels, 0, cube->format, D3DPOOL_MANAGED,
+		&cube->cube)))
+	{
+		log_line("direct3d: a cube map of %d texels a side could not be made", size);
+		free(cube);
+		return NULL;
+	}
+	return cube;
+}
+
+static void cube_write(struct r_d3d_texture *cube, int face, int level, const unsigned long *argb)
+{
+	D3DLOCKED_RECT locked;
+	int size;
+
+	if (!cube || !cube->cube || face < 0 || face > 5 || level >= cube->levels ||
+		FAILED(IDirect3DCubeTexture8_LockRect(cube->cube, (D3DCUBEMAP_FACES)face, (UINT)level, &locked, NULL, 0)))
+	{
+		return;
+	}
+	size = cube->width >> level ? cube->width >> level : 1;
+	write_rows(cube, &locked, argb, size, size);
+	IDirect3DCubeTexture8_UnlockRect(cube->cube, (D3DCUBEMAP_FACES)face, (UINT)level);
+}
+
+static void write_rows(const struct r_d3d_texture *texture, const D3DLOCKED_RECT *locked_rect,
+	const unsigned long *argb, int width, int height)
+{
+	D3DLOCKED_RECT locked = *locked_rect;
+
 	for (int y = 0; y < height; y++)
 	{
 		const unsigned long *in = argb + (size_t)y * width;
@@ -295,7 +442,13 @@ static void texture_write(struct r_d3d_texture *texture, int level, const unsign
 			break;
 		}
 	}
-	IDirect3DTexture8_UnlockRect(texture->texture, level);
+}
+
+/* the card's texture of one of ours, flat or cube */
+static IDirect3DBaseTexture8 *base_texture(const struct r_d3d_texture *texture)
+{
+	return !texture ? NULL : texture->cube ? (IDirect3DBaseTexture8 *)texture->cube :
+		(IDirect3DBaseTexture8 *)texture->texture;
 }
 
 static void texture_delete(struct r_d3d_texture *texture)
@@ -306,13 +459,15 @@ static void texture_delete(struct r_d3d_texture *texture)
 	address for it) */
 	for (DWORD stage = 0; d3d.device && stage < CACHED_STAGES; stage++)
 	{
-		if (d3d.cache.texture_known[stage] && d3d.cache.textures[stage] == (IDirect3DBaseTexture8 *)texture->texture)
+		if (d3d.cache.texture_known[stage] && d3d.cache.textures[stage] == base_texture(texture))
 			set_texture(stage, NULL);
 	}
 	/* (the texture pass's stages are set again: one may be this) */
 	d3d.detail.stage_count = 0;
 	if (texture->texture)
 		IDirect3DTexture8_Release(texture->texture);
+	if (texture->cube)
+		IDirect3DCubeTexture8_Release(texture->cube);
 	free(texture);
 }
 
@@ -708,6 +863,139 @@ static void draw(const struct r_d3d_state *state, struct r_d3d_texture *texture,
 	draw_triangles(vertices, vertex_count, indices, index_count);
 }
 
+static void set_pixel_shader(DWORD shader)
+{
+	if (shader != d3d.pixel_shader)
+	{
+		IDirect3DDevice8_SetPixelShader(d3d.device, shader);
+		d3d.pixel_shader = shader;
+	}
+}
+
+/* a water stage: its texture, its coordinates the stage's own set, filtered,
+wrapped or clamped, with or without its levels */
+static void water_stage(DWORD stage, const struct r_d3d_texture *texture, int wrap, int levels)
+{
+	set_texture(stage, base_texture(texture));
+	set_stage_state(stage, D3DTSS_TEXCOORDINDEX, stage);
+	set_stage_state(stage, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+	set_stage_state(stage, D3DTSS_ADDRESSU, wrap ? D3DTADDRESS_WRAP : D3DTADDRESS_CLAMP);
+	set_stage_state(stage, D3DTSS_ADDRESSV, wrap ? D3DTADDRESS_WRAP : D3DTADDRESS_CLAMP);
+	set_stage_state(stage, D3DTSS_ADDRESSW, wrap ? D3DTADDRESS_WRAP : D3DTADDRESS_CLAMP);
+	set_stage_state(stage, D3DTSS_MAGFILTER, D3DTEXF_LINEAR);
+	set_stage_state(stage, D3DTSS_MINFILTER, D3DTEXF_LINEAR);
+	set_stage_state(stage, D3DTSS_MIPFILTER, levels ? D3DTEXF_LINEAR : D3DTEXF_NONE);
+	set_stage_state(stage, D3DTSS_MAXANISOTROPY, 1);
+}
+
+static void water_triangles(const struct r_d3d_water_vertex *vertices, unsigned long vertex_count,
+	const unsigned short *indices, unsigned long index_count)
+{
+	d3d.draws++;
+	if (d3d.behaviour == D3DCREATE_SOFTWARE_VERTEXPROCESSING || vertex_count <= d3d.caps.MaxVertexIndex + 1UL)
+	{
+		IDirect3DDevice8_DrawIndexedPrimitiveUP(d3d.device, D3DPT_TRIANGLELIST, 0, vertex_count, index_count / 3, indices,
+			D3DFMT_INDEX16, vertices, sizeof(*vertices));
+		return;
+	}
+	{
+		static struct r_d3d_water_vertex spread[3 * 128];
+
+		for (unsigned long first = 0; first < index_count; first += 3 * 128)
+		{
+			unsigned long count = index_count - first < 3 * 128 ? index_count - first : 3 * 128;
+
+			for (unsigned long i = 0; i < count; i++)
+				spread[i] = vertices[indices[first + i]];
+			IDirect3DDevice8_DrawPrimitiveUP(d3d.device, D3DPT_TRIANGLELIST, count / 3, spread, sizeof(*spread));
+		}
+	}
+}
+
+/* Halo's water: the base map multiplying what is under it (where the shader
+says), then the reflection added, by the water's program; the ordinary
+draws' states put back after */
+static void draw_water(const struct r_d3d_water *water, const struct r_d3d_water_vertex *vertices,
+	unsigned long vertex_count, const unsigned short *indices, unsigned long index_count)
+{
+	union
+	{
+		float value;
+		DWORD bits;
+	} bias;
+
+	if (!d3d.device || d3d.lost || !d3d.water || index_count < 3 || !vertex_count || !water->bump || !water->reflection ||
+		!water->tint)
+	{
+		return;
+	}
+	scene_begin();
+	set_vertex_shader(d3d.water_vertex_shader);
+	render_state(D3DRS_FOGENABLE, FALSE);
+	render_state(D3DRS_ALPHATESTENABLE, FALSE);
+	render_state(D3DRS_STENCILENABLE, FALSE);
+	render_state(D3DRS_ZENABLE, D3DZB_TRUE);
+	render_state(D3DRS_ALPHABLENDENABLE, TRUE);
+	for (DWORD stage = 1; stage < 6 && stage < d3d.caps.MaxTextureBlendStages; stage++)
+		set_texture(stage, NULL);
+	/* (what is under the water times the base map, toward no change in the
+	fog: the texel where the colour's alpha is 1, white where 0) */
+	if (water->base_multiply && water->base)
+	{
+		set_pixel_shader(0);
+		water_stage(0, water->base, FALSE, TRUE);
+		set_stage_state(0, D3DTSS_TEXCOORDINDEX, 5);
+		set_stage_state(0, D3DTSS_COLOROP, D3DTOP_BLENDDIFFUSEALPHA);
+		set_stage_state(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+		set_stage_state(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+		set_stage_state(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+		set_stage_state(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+		set_stage_state(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+		set_stage_state(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+		render_state(D3DRS_SRCBLEND, D3DBLEND_ZERO);
+		render_state(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+		render_state(D3DRS_ZWRITEENABLE, TRUE);
+		water_triangles(vertices, vertex_count, indices, index_count);
+	}
+	/* the reflection, added */
+	bias.value = -water->bump_lod_bias;
+	water_stage(0, water->bump, TRUE, TRUE);
+	set_stage_state(0, D3DTSS_MIPMAPLODBIAS, bias.bits);
+	if (d3d.water >= 2)
+	{
+		water_stage(1, water->reflection, FALSE, TRUE);
+		water_stage(2, water->tint, FALSE, FALSE);
+		water_stage(5, water->base_alpha && water->base ? water->base : d3d.white, FALSE, TRUE);
+	}
+	else
+	{
+		float tint[4] = { (float)((water->tint_color >> 16) & 0xFF) / 255.0f,
+			(float)((water->tint_color >> 8) & 0xFF) / 255.0f, (float)(water->tint_color & 0xFF) / 255.0f, 1.0f };
+
+		set_stage_state(1, D3DTSS_TEXCOORDINDEX, 1);
+		set_stage_state(2, D3DTSS_TEXCOORDINDEX, 2);
+		water_stage(3, water->reflection, FALSE, TRUE);
+		IDirect3DDevice8_SetPixelShaderConstant(d3d.device, 0, tint, 1);
+	}
+	set_pixel_shader(d3d.water_pixel_shader);
+	render_state(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	render_state(D3DRS_DESTBLEND, D3DBLEND_ONE);
+	render_state(D3DRS_ZWRITEENABLE, FALSE);
+	water_triangles(vertices, vertex_count, indices, index_count);
+	/* (the ordinary draws' states again) */
+	set_pixel_shader(0);
+	set_stage_state(0, D3DTSS_MIPMAPLODBIAS, 0);
+	for (DWORD stage = 1; stage < 6 && stage < d3d.caps.MaxTextureBlendStages; stage++)
+	{
+		set_texture(stage, NULL);
+		set_stage_state(stage, D3DTSS_TEXCOORDINDEX, stage);
+		set_stage_state(stage, D3DTSS_COLOROP, D3DTOP_DISABLE);
+		set_stage_state(stage, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+	}
+	set_texture(0, NULL);
+	stages_for_drawing();
+}
+
 /* a pixel of the back buffer's format as 0x00RRGGBB */
 static unsigned long pixel_rgb(const unsigned char *row, int x)
 {
@@ -813,6 +1101,12 @@ static void client_size(HWND window, UINT *width, UINT *height)
 static void close_device(void)
 {
 	scene_end();
+	if (d3d.white)
+	{
+		if (d3d.white->texture)
+			IDirect3DTexture8_Release(d3d.white->texture);
+		free(d3d.white);
+	}
 	if (d3d.device)
 		IDirect3DDevice8_Release(d3d.device);
 	if (d3d.d3d)
@@ -963,6 +1257,53 @@ int w95_d3d_open(HWND window)
 	d3d.anisotropy = (d3d.caps.TextureFilterCaps & D3DPTFILTERCAPS_MINFANISOTROPIC) && d3d.caps.MaxAnisotropy > 1 ?
 		(d3d.caps.MaxAnisotropy > 8 ? 8 : d3d.caps.MaxAnisotropy) : 1;
 	states_initialize();
+	/* Halo's water (setting d3d_water: 2, or not given, the best program the
+	card runs; 1 Halo's own, pixel shaders 1.1; 0 an ordinary surface): its
+	vertex program, its pixel program, a white texel where it has no base
+	map; a card without cube maps or pixel shaders draws it as before */
+	{
+		long wanted = dos_setting_integer("d3d_water", 2);
+		int program = 0;
+
+		if (wanted >= 2 && d3d.caps.PixelShaderVersion >= D3DPS_VERSION(1, 4) && d3d.caps.MaxSimultaneousTextures >= 6)
+			program = 2;
+		else if (wanted >= 1 && d3d.caps.PixelShaderVersion >= D3DPS_VERSION(1, 1) &&
+			d3d.caps.MaxSimultaneousTextures >= 4)
+		{
+			program = 1;
+		}
+		if (!(d3d.caps.TextureCaps & D3DPTEXTURECAPS_CUBEMAP))
+			program = 0;
+		if (program && FAILED(IDirect3DDevice8_CreateVertexShader(d3d.device, water_declaration, water_vertex_function,
+			&d3d.water_vertex_shader, 0)))
+		{
+			system_log("direct3d: the water's vertex shader could not be made");
+			program = 0;
+		}
+		if (program == 2 && FAILED(IDirect3DDevice8_CreatePixelShader(d3d.device, water_pixel_14,
+			&d3d.water_pixel_shader)))
+		{
+			system_log("direct3d: the water's pixel shader 1.4 could not be made: Halo's 1.1 one");
+			program = 1;
+		}
+		if (program == 1 && FAILED(IDirect3DDevice8_CreatePixelShader(d3d.device, water_pixel_11,
+			&d3d.water_pixel_shader)))
+		{
+			system_log("direct3d: the water's pixel shader 1.1 could not be made: water as before");
+			program = 0;
+		}
+		if (program)
+		{
+			static const unsigned long white = 0xFFFFFFFFUL;
+
+			d3d.white = texture_new(1, 1, 1, _r_d3d_alpha_full);
+			if (d3d.white)
+				texture_write(d3d.white, 0, &white);
+			else
+				program = 0;
+		}
+		d3d.water = program;
+	}
 
 	memset(&device, 0, sizeof(device));
 	device.maximum_texture_size = (int)(d3d.caps.MaxTextureWidth < d3d.caps.MaxTextureHeight ? d3d.caps.MaxTextureWidth :
@@ -995,6 +1336,10 @@ int w95_d3d_open(HWND window)
 	device.clear = clear;
 	device.draw = draw;
 	device.read_back = read_back;
+	device.water = d3d.water;
+	device.cube_new = cube_new;
+	device.cube_write = cube_write;
+	device.draw_water = draw_water;
 	if (!r_d3d_use(&device))
 	{
 		close_device();
@@ -1003,7 +1348,7 @@ int w95_d3d_open(HWND window)
 	memset(&identifier, 0, sizeof(identifier));
 	IDirect3D8_GetAdapterIdentifier(d3d.d3d, D3DADAPTER_DEFAULT, D3DENUM_NO_WHQL_LEVEL, &identifier);
 	log_line("direct3d: %s (%s), %ux%u, %s vertex processing, textures %s, largest %d%s%s, shape up to %d:1, "
-		"anisotropy %lu, depth %d bits%s, Xbox texture pass %d stages%s%s%s",
+		"anisotropy %lu, depth %d bits%s, Xbox texture pass %d stages%s%s%s, water program %d",
 		identifier.Description, identifier.Driver, d3d.presentation.BackBufferWidth, d3d.presentation.BackBufferHeight,
 		d3d.behaviour == D3DCREATE_SOFTWARE_VERTEXPROCESSING ? "software" : "hardware",
 		d3d.formats[0] == D3DFMT_A8R8G8B8 ? "32-bit" : "16-bit", device.maximum_texture_size,
@@ -1013,7 +1358,7 @@ int w95_d3d_open(HWND window)
 		d3d.presentation.AutoDepthStencilFormat == D3DFMT_D32 ? 32 : 24, d3d.stencil ? " and a stencil" : "",
 		device.detail_stages, device.draws_detail ? ", detail maps" : "",
 		device.draws_lightmaps ? ", lightmaps" : "",
-		d3d.modulate_twice ? "" : ", no MODULATE2X (the light is halved)");
+		d3d.modulate_twice ? "" : ", no MODULATE2X (the light is halved)", d3d.water);
 	return TRUE;
 }
 
@@ -1045,6 +1390,7 @@ static int reset(void)
 		return FALSE;
 	/* (a Reset puts every state back as it was at the start) */
 	memset(&d3d.cache, 0, sizeof(d3d.cache));
+	d3d.pixel_shader = 0;
 	states_initialize();
 	log_line("direct3d: the device made again at %ux%u", d3d.presentation.BackBufferWidth,
 		d3d.presentation.BackBufferHeight);

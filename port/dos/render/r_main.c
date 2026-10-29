@@ -141,7 +141,7 @@ int r_draws_xbox_detail(void)
 unsigned long r_hardware_texture_new(unsigned long *const *levels, const int *widths, const int *heights, int count,
 	int alpha)
 {
-	return r_draws_xbox_detail() && levels && count > 0 && r_backend->hardware_texture_new ?
+	return (r_draws_xbox_detail() || r_draws_water()) && levels && count > 0 && r_backend->hardware_texture_new ?
 		r_backend->hardware_texture_new(levels, widths, heights, count, alpha) : 0;
 }
 
@@ -154,6 +154,25 @@ void r_hardware_texture_delete(unsigned long texture)
 void r_set_detail_pass(const struct r_detail_pass *pass)
 {
 	next_detail_pass = r_draws_xbox_detail() ? pass : NULL;
+}
+
+void r_hardware_texture_write(unsigned long texture, int level, const unsigned long *argb)
+{
+	if (texture && argb && r_backend && r_backend->hardware_texture_write)
+		r_backend->hardware_texture_write(texture, level, argb);
+}
+
+unsigned long r_hardware_cube_new(unsigned long *const *faces[6], int size, int levels)
+{
+	return faces && size > 0 && levels > 0 && r_backend && r_backend->hardware_cube_new ?
+		r_backend->hardware_cube_new(faces, size, levels) : 0;
+}
+
+/* ---------- Halo's water (r_backend's water) */
+
+int r_draws_water(void)
+{
+	return r_backend && r_backend->draws_water && r_backend->water ? r_backend->draws_water() : 0;
 }
 
 void r_hardware_read_back(void)
@@ -331,6 +350,52 @@ float r_distance(const float point[3])
 float r_pixels_per_unit_at(float distance)
 {
 	return distance > 0.01f ? view.focal / distance : view.focal * 100.0f;
+}
+
+/* water's vertices for the card (r_water_vertex): put in the view, not
+clipped or divided (the card does both), each with the way to the eye */
+void r_draw_water(const struct r_water *water, const struct r_vertex *vertices, const float *frames, int vertex_count,
+	const unsigned short *indices, int triangle_count)
+{
+	static struct r_water_vertex *out;
+	static int out_size;
+
+	if (!r_draws_water() || !water || !vertices || !frames || vertex_count <= 0 || triangle_count <= 0)
+		return;
+	if (vertex_count > out_size)
+	{
+		struct r_water_vertex *grown = realloc(out, (size_t)vertex_count * sizeof(*grown));
+
+		if (!grown)
+			return;
+		out = grown;
+		out_size = vertex_count;
+	}
+	for (int i = 0; i < vertex_count; i++)
+	{
+		struct r_water_vertex *o = &out[i];
+		float d[3] = { vertices[i].position[0] - view.view.position[0], vertices[i].position[1] - view.view.position[1],
+			vertices[i].position[2] - view.view.position[2] };
+		float x = dot(d, view.right), y = dot(d, view.up), z = dot(d, view.forward);
+		float distance = sqrtf(dot(d, d));
+
+		o->xz = view.centre_x * z + x * view.focal_x;
+		o->yz = view.centre_y * z - y * view.focal;
+		o->z = z;
+		o->u = vertices[i].u;
+		o->v = vertices[i].v;
+		o->fade = 1.0f;
+		if (view.fogged)
+		{
+			float fog = (z - view.view.fog_start) * view.fog_scale;
+
+			o->fade = 1.0f - (fog < 0.0f ? 0.0f : fog > 1.0f ? 1.0f : fog);
+		}
+		for (int k = 0; k < 3; k++)
+			o->eye[k] = distance > 1e-6f ? -d[k] / distance : 0.0f;
+		memcpy(o->frame, &frames[i * 9], sizeof(o->frame));
+	}
+	r_backend->water(water, out, vertex_count, indices, triangle_count);
 }
 
 /* ---------- triangles */

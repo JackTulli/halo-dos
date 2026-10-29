@@ -149,6 +149,13 @@ use the unpacked copy.
     mixed on the card each frame, as Halo's own texture pass did). SHADERS
     XBOX needs a card with three texture units or more (GeForce 3, Radeon
     8500 and later); others bake the detail into the textures.
+  - DIRECT3D 8's water is Halo's own: its ripples (four layers of ripple
+    maps, moving), the reflection of its cube map in them, its tints, on a
+    card with pixel shaders. Pixel shaders 1.4 (Radeon 8500 and later)
+    tint every pixel by how squarely its ripple is seen, after ATI's ocean
+    water program; pixel shaders 1.1 to 1.3 (GeForce 3 and 4 Ti) draw it as
+    the Xbox did, one tint a draw. Setting d3d_water: 2 (the best the card
+    has), 1 (the Xbox's way), 0 (as OPENGL draws it).
   - SETTINGS > DISPLAY: WINDOW, FULL SCREEN (at the desktop's resolution)
     or EXCLUSIVE (the screen switched to a mode near the picture's size:
     the fastest on an old PC); SCALING: SHARP, FILL or STRETCH. RESOLUTION
@@ -278,5 +285,6 @@ use the unpacked copy.
   This product uses DOS/32 Advanced DOS Extender technology.
 
   Also in these programs: mTCP by Michael B. Brutman (GPL-3.0), Zstandard
-  (BSD), musl's maths (MIT), PDCLib (CC0), KCP (MIT) and Monocypher (CC0 /
-  BSD-2-Clause). THIRDPTY.TXT has their licences.
+  (BSD), musl's maths (MIT), PDCLib (CC0), KCP (MIT), Monocypher (CC0 /
+  BSD-2-Clause) and Direct3D 8's water program after Mahmoud Galal's
+  Irrlicht_Water_Shader (MIT). THIRDPTY.TXT has their licences.

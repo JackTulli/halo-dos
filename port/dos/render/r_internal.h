@@ -122,6 +122,20 @@ struct r_raster_vertex
 	float lightmap_s, lightmap_t;
 };
 
+/* a vertex of Halo's water for a card (r_backend's water): the picture's x
+and y times the view's depth (centre x z + x focal: no division, so that
+the card clips them), the depth; the base map's coordinates; how much of it
+the fog leaves (1 all, to 0); and in the world, the way to the eye (unit)
+and the surface's normal, binormal and tangent */
+struct r_water_vertex
+{
+	float xz, yz, z;
+	float u, v;
+	float fade;
+	float eye[3];
+	float frame[9];
+};
+
 #define R_RASTER_FOG 0x100 /* the fog terms are not all zero */
 #define R_RASTER_AFFINE 0x200 /* no perspective (the screen's quads) */
 #define R_RASTER_SCREEN 0x400 /* a screen quad: blend as r_screen_blend says */
@@ -310,6 +324,14 @@ struct r_backend
 	unsigned long (*hardware_texture_new)(unsigned long *const *levels, const int *widths, const int *heights,
 		int count, int alpha);
 	void (*hardware_texture_delete)(unsigned long texture);
+	/* a card texture's level written again, and cube maps (NULL: none) */
+	void (*hardware_texture_write)(unsigned long texture, int level, const unsigned long *argb);
+	unsigned long (*hardware_cube_new)(unsigned long *const *faces[6], int size, int levels);
+	/* Halo's water (NULL: none; r_draws_water's 1 or 2), its vertices
+	unclipped (the card clips them) */
+	int (*draws_water)(void);
+	void (*water)(const struct r_water *water, const struct r_water_vertex *vertices, int vertex_count,
+		const unsigned short *indices, int triangle_count);
 };
 
 /* the one in use, NULL for the software rasterizer */

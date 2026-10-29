@@ -51,6 +51,9 @@ THIRD_PARTY = [
      GAME / "port/third_party/kcp/LICENSE"),
     ("Monocypher (Loup Vaillant, et al.)", "internet play's encryption and signatures",
      GAME / "port/third_party/monocypher/LICENCE.md"),
+    ("Irrlicht_Water_Shader (Mahmoud Galal; after ATI's RenderMonkey ocean water)",
+     "Direct3D 8's water program for pixel shaders 1.4",
+     RELEASE / "WATER_SHADER.TXT"),
 ]
 NOTES = """\
 THE PARTS OF THESE PROGRAMS MADE BY OTHER PEOPLE

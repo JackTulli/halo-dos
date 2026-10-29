@@ -186,6 +186,13 @@ long dos_frame_number(void)
 	return frame_number;
 }
 
+/* the game's time in seconds, between its ticks too (Halo's frame's game
+time: the water's ripples move by it) */
+float dos_game_seconds(void)
+{
+	return (float)game_time_get() / 30.0f + render.time_delta_since_tick_sec;
+}
+
 /* models' sizes on the screen as their level of detail takes them
 (models.c render_model, HALO_DOS): the DETAIL setting's LOWEST and LOW
 take coarser models, NORMAL and HIGH the game's own */
@@ -976,6 +983,33 @@ void render_frame(
 			every = dos_setting_integer("log_scripts", 0);
 		if (every > 0 && frame_number % every == 0)
 			dos_log_scripts();
+	}
+	{
+		/* testing (setting test_script=<command>@<frame>[;...]): a script
+		command run as the frame begins (cheat_all_weapons@90) */
+		const char *script = dos_setting("test_script", "");
+
+		while (*script)
+		{
+			const char *end = strchr(script, ';'), *at;
+			char command[100];
+			size_t length = end ? (size_t)(end - script) : strlen(script);
+
+			if (length < sizeof(command))
+			{
+				memcpy(command, script, length);
+				command[length] = 0;
+				at = strrchr(command, '@');
+				if (at && atol(at + 1) == frame_number)
+				{
+					extern boolean hs_compile_and_evaluate(char const *expression);
+
+					command[at - command] = 0;
+					hs_compile_and_evaluate(command);
+				}
+			}
+			script = end ? end + 1 : script + length;
+		}
 	}
 	frame_begin();
 	for (short window_index = 0; window_index < window_count; window_index++)

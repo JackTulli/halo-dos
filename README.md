@@ -248,6 +248,13 @@ characters of a command line, so put long lists in `HALODOS.CFG`.
 `SHADERS XBOX` needs a card with three texture units or more (GeForce 3, Radeon 8500 and later);
 other cards bake the detail into the textures.
 
+Direct3D 8 draws Halo's water as Halo does: its moving ripple layers, the reflection of its cube map
+in them, and its tints, which go from parallel to perpendicular with the viewing angle.
+- **Pixel shaders 1.4** (Radeon 8500 and later): the tint is worked out per pixel from the ripples.
+- **Pixel shaders 1.1–1.3** (GeForce 3, GeForce 4 Ti): the Xbox's own program, one tint a draw.
+
+The `d3d_water` setting picks: 2 the best the card has, 1 the Xbox's way, 0 as OpenGL draws water.
+
 ## Playing online
 
 MULTIPLAYER → ONLINE:
@@ -371,6 +378,8 @@ Notes:
 - [mTCP](https://www.brutman.com/mTCP/) by Michael B. Brutman (GPL-3.0), the DOS TCP/IP stack.
 - [DOS/32 Advanced DOS Extender](http://dos32a.narechk.net/) by Supernar Systems. *This product
   uses DOS/32 Advanced DOS Extender technology.*
+- Direct3D 8's ps.1.4 water program follows [Irrlicht_Water_Shader](https://github.com/mahmoudgalal/Irrlicht_Water_Shader)
+  by Mahmoud Galal (MIT; after ATI's RenderMonkey ocean water), fed with Halo's own ripples, cube map and tints.
 - [Zstandard](https://github.com/facebook/zstd) (BSD), [musl](https://musl.libc.org)'s maths (MIT),
   [PDCLib](https://github.com/DevSolar/pdclib) via [nxdk](https://github.com/XboxDev/nxdk) (CC0),
   [KCP](https://github.com/skywind3000/kcp) (MIT), [Monocypher](https://monocypher.org)
