@@ -1525,6 +1525,13 @@ int dos_xbox_sky(void)
 	return r_draws_lightmaps() && dos_setting_integer("d3d_sky", 1);
 }
 
+/* whether the fog is Halo's own (Direct3D 8: the sky's atmospheric fog
+and the water's planar fog), not a fade into the sky's colour */
+int dos_xbox_fog(void)
+{
+	return r_draws_lightmaps() && dos_setting_integer("d3d_fog", 1);
+}
+
 /* a bitmap on the card (its first), each level the map stores up to the
 texture size, alpha kept or not; 0 if it cannot be */
 static unsigned long hardware_texture(long bitmap_tag_index, int alpha)
@@ -2921,6 +2928,7 @@ void dos_textures_dispose_from_old_map(void)
 	}
 	meters_dispose();
 	dos_water_dispose();
+	dos_planar_fog_dispose();
 	texture_slot_count = 0;
 	material_slot_count = 0;
 }

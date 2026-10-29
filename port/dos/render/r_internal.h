@@ -332,6 +332,10 @@ struct r_backend
 	int (*draws_water)(void);
 	void (*water)(const struct r_water *water, const struct r_water_vertex *vertices, int vertex_count,
 		const unsigned short *indices, int triangle_count);
+	/* the view's fog held at a maximum from its end, then all of it at the
+	far clip (r_view's fog_maximum and fog_far; maximum 1: none of that),
+	told after view_fog (NULL: the backend's fog is all at its end) */
+	void (*view_fog_curve)(float maximum, float far, float z_far);
 };
 
 /* the one in use, NULL for the software rasterizer */

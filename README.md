@@ -255,6 +255,11 @@ in them, and its tints, which go from parallel to perpendicular with the viewing
 
 The `d3d_water` setting picks: 2 the best the card has, 1 the Xbox's way, 0 as OpenGL draws water.
 
+Direct3D 8's fog is Halo's own too: each sky's atmospheric fog (its colour, distances and maximum
+density, then all of it in the draw distance's last stretch), and the planar fog of
+water seen from above, which hides what lies under the surface by its depth and distance, as on
+The Silent Cartographer's sea. The `d3d_fog` setting 0 fades into the sky's colour instead.
+
 ## Playing online
 
 MULTIPLAYER → ONLINE:

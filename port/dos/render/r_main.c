@@ -196,7 +196,30 @@ static struct
 	float far;
 	int fogged;
 	float fog_scale;
+	/* the fog held at its maximum from its end to fog_far, then risen to
+	all at the far clip (r_view's fog_maximum: 1 none of that) */
+	float fog_maximum, fog_far, fog_far_scale;
 } view;
+
+/* the fog's share at a depth in the view (0 none, 1 all) */
+static float fog_at(float z)
+{
+	float fog = (z - view.view.fog_start) * view.fog_scale;
+
+	if (fog < 0.0f) fog = 0.0f;
+	if (fog > 1.0f) fog = 1.0f;
+	if (view.fog_maximum < 1.0f)
+	{
+		fog *= view.fog_maximum;
+		if (z > view.fog_far)
+		{
+			float rise = (z - view.fog_far) * view.fog_far_scale;
+
+			fog += (1.0f - fog) * (rise > 1.0f ? 1.0f : rise);
+		}
+	}
+	return fog;
+}
 
 static float dot(const float *a, const float *b)
 {
@@ -292,15 +315,29 @@ void r_view_begin(const struct r_view *description)
 	view.tangent_x = width * 0.5f / view.focal_x;
 	view.tangent_y = height * 0.5f / view.focal;
 	view.far = description->fog_end > 0.0f ? description->fog_end : description->z_far;
-	if (view.far <= description->z_near)
-		view.far = description->z_near + 1.0f;
 	view.fogged = description->fog_end > description->fog_start && description->fog_end > 0.0f;
 	view.fog_scale = view.fogged ? 1.0f / (description->fog_end - description->fog_start) : 0.0f;
+	/* (a fog held short of all: to the far clip, all of it there) */
+	view.fog_maximum = 1.0f;
+	view.fog_far = view.fog_far_scale = 0.0f;
+	if (view.fogged && description->fog_maximum > 0.0f && description->fog_maximum < 1.0f &&
+		description->z_far > description->fog_end)
+	{
+		view.fog_maximum = description->fog_maximum;
+		view.fog_far = description->fog_far < description->fog_end ? description->fog_end :
+			description->fog_far > description->z_far - 1.0f ? description->z_far - 1.0f : description->fog_far;
+		view.fog_far_scale = 1.0f / (description->z_far - view.fog_far);
+		view.far = description->z_far;
+	}
+	if (view.far <= description->z_near)
+		view.far = description->z_near + 1.0f;
 	if (r_frame.bits == 8 && view.fogged)
 		r_palette_set_fog(description->fog_color);
 	r_raster_set_depth_scale(description->z_near);
 	if (r_backend)
 		r_backend->view_fog(view.fogged, description->fog_start, description->fog_end, description->fog_color);
+	if (r_backend && r_backend->view_fog_curve)
+		r_backend->view_fog_curve(view.fog_maximum, view.fog_far, view.far);
 	if (r_backend && r_backend->view_rect)
 		r_backend->view_rect(description->x0, description->y0, description->x1, description->y1, 1);
 	if (description->sky_colors)
@@ -386,11 +423,7 @@ void r_draw_water(const struct r_water *water, const struct r_vertex *vertices, 
 		o->v = vertices[i].v;
 		o->fade = 1.0f;
 		if (view.fogged)
-		{
-			float fog = (z - view.view.fog_start) * view.fog_scale;
-
-			o->fade = 1.0f - (fog < 0.0f ? 0.0f : fog > 1.0f ? 1.0f : fog);
-		}
+			o->fade = 1.0f - fog_at(z);
 		for (int k = 0; k < 3; k++)
 			o->eye[k] = distance > 1e-6f ? -d[k] / distance : 0.0f;
 		memcpy(o->frame, &frames[i * 9], sizeof(o->frame));
@@ -479,13 +512,7 @@ static void light_vertex(struct clip_vertex *out, unsigned long color, unsigned 
 	float fog = 0.0f;
 
 	if (view.fogged && !(flags & R_DRAW_NO_FOG))
-	{
-		float distance = out->z;
-
-		fog = (distance - view.view.fog_start) * view.fog_scale;
-		if (fog < 0.0f) fog = 0.0f;
-		if (fog > 1.0f) fog = 1.0f;
-	}
+		fog = fog_at(out->z);
 	/* (added light, a glow's or water's reflection: faded out by the fog,
 	not turned to the fog's colour, which would add that too; as Halo fades
 	its added passes) */

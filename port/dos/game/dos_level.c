@@ -74,6 +74,10 @@ struct batch
 	struct r_vertex *vertices;
 	unsigned short *indices;
 	int vertex_count, triangle_count;
+	/* each triangle's surface in the BSP (a surface is a triangle): one that
+	several clusters list is in each one's batches, and a pass that blends
+	draws it once a view (draw_once) */
+	long *surfaces;
 	float center[3], radius;
 	/* its material's detail maps' copies of its vertices (dos_detail_maps:
 	build_detail_layers): their coordinates, and their grey the map's
@@ -118,6 +122,10 @@ static struct
 	unsigned long sky_gradient[R_SKY_STOPS];
 	int sky_gradient_made;
 	long triangles, vertices;
+	/* each BSP surface's last blended pass (draw_once), and the passes'
+	count */
+	long *surface_passes;
+	long surface_count, pass;
 	/* each structure material's vertices' baked light (its lightmap's,
 	sampled at load), for the objects over them (dos_level_light_at): by
 	lightmap, its first material's index in these */
@@ -1018,6 +1026,7 @@ static void add_batches(const struct structure_bsp *bsp, const struct source_mat
 			batch->texture = source->material->texture;
 			batch->indices = raw_malloc((size_t)triangles * 3 * sizeof(unsigned short));
 			batch->vertices = raw_malloc((size_t)triangles * 3 * sizeof(struct r_vertex));
+			batch->surfaces = raw_malloc((size_t)triangles * sizeof(long));
 			if (source->lightmap)
 			{
 				batch->lightmap_coordinates = raw_malloc((size_t)triangles * 3 * 2 * sizeof(float));
@@ -1026,10 +1035,11 @@ static void add_batches(const struct structure_bsp *bsp, const struct source_mat
 			}
 			if (source->frames)
 				batch->frames = raw_malloc((size_t)triangles * 3 * 9 * sizeof(float));
-			if (!batch->indices || !batch->vertices)
+			if (!batch->indices || !batch->vertices || !batch->surfaces)
 			{
 				raw_free(batch->indices);
 				raw_free(batch->vertices);
+				raw_free(batch->surfaces);
 				raw_free(batch->lightmap_coordinates);
 				raw_free(batch->frames);
 				level.batch_count--;
@@ -1064,6 +1074,7 @@ static void add_batches(const struct structure_bsp *bsp, const struct source_mat
 					}
 					batch->indices[batch->triangle_count * 3 + k] = (unsigned short)vertex_map[v];
 				}
+				batch->surfaces[batch->triangle_count] = s;
 				batch->triangle_count++;
 			}
 			for (int v = 0; v < batch->vertex_count; v++)
@@ -1401,6 +1412,8 @@ static void load(int new_palette)
 	/* each cluster's batches, by subcluster */
 	vertex_map = raw_malloc((size_t)largest_vertex_count * sizeof(short));
 	seen = raw_calloc((size_t)(bsp->surfaces.count > 0 ? bsp->surfaces.count : 1), sizeof(long));
+	level.surface_passes = raw_calloc((size_t)(bsp->surfaces.count > 0 ? bsp->surfaces.count : 1), sizeof(long));
+	level.surface_count = level.surface_passes ? bsp->surfaces.count : 0;
 	level.cluster_count = (int)bsp->clusters.count;
 	level.clusters = raw_calloc((size_t)(level.cluster_count ? level.cluster_count : 1), sizeof(struct cluster));
 	if (!vertex_map || !seen || !level.clusters)
@@ -1498,6 +1511,7 @@ void dos_level_unload(void)
 	{
 		raw_free(level.batches[i].vertices);
 		raw_free(level.batches[i].indices);
+		raw_free(level.batches[i].surfaces);
 		raw_free(level.batches[i].coarse_vertices);
 		raw_free(level.batches[i].coarse_indices);
 		raw_free(level.batches[i].detail_vertices[0]);
@@ -1520,6 +1534,7 @@ void dos_level_unload(void)
 	raw_free(level.first_material);
 	raw_free(level.batches);
 	raw_free(level.clusters);
+	raw_free(level.surface_passes);
 	memset(&level, 0, sizeof(level));
 }
 
@@ -1664,13 +1679,91 @@ static void draw_xbox_detail(const struct batch *batch, int coarse)
 		batch->texture, batch->material->flags & R_DRAW_TWO_SIDED);
 }
 
-static void draw_batch(const struct batch *batch, int coarse)
+/* The triangles of a batch that a pass which blends has not drawn yet (a
+surface several clusters list is in each one's batches: a glow, glass or
+water's added reflection drawn twice there would be twice as bright; Halo
+draws each surface once a view): the batch's own indices where it has
+drawn none of them, the others' in a list of the pass's, NULL where it has
+drawn them all. Each pass starts with level.pass raised. */
+static const unsigned short *draw_once(const struct batch *batch, int *triangle_count)
+{
+	static unsigned short *scratch;
+	static int scratch_size;
+	int fresh = 0;
+
+	*triangle_count = batch->triangle_count;
+	if (!batch->surfaces || !level.surface_passes)
+		return batch->indices;
+	for (int t = 0; t < batch->triangle_count; t++)
+	{
+		long s = batch->surfaces[t];
+
+		fresh += s < 0 || s >= level.surface_count || level.surface_passes[s] != level.pass;
+	}
+	if (!fresh)
+		return NULL;
+	if (fresh < batch->triangle_count && fresh * 3 > scratch_size)
+	{
+		raw_free(scratch);
+		scratch = raw_malloc((size_t)fresh * 3 * sizeof(unsigned short));
+		scratch_size = scratch ? fresh * 3 : 0;
+		if (!scratch)
+			return batch->indices;
+	}
+	*triangle_count = 0;
+	for (int t = 0; t < batch->triangle_count; t++)
+	{
+		long s = batch->surfaces[t];
+
+		if (s >= 0 && s < level.surface_count)
+		{
+			if (level.surface_passes[s] == level.pass)
+				continue;
+			level.surface_passes[s] = level.pass;
+		}
+		if (fresh < batch->triangle_count)
+			memcpy(&scratch[*triangle_count * 3], &batch->indices[t * 3], 3 * sizeof(unsigned short));
+		++*triangle_count;
+	}
+	return fresh < batch->triangle_count ? scratch : batch->indices;
+}
+
+/* Halo's planar fog over a batch under the eye's fog plane (Direct3D 8,
+dos_planar_fog.c): after every opaque batch and its texture pass, as Halo
+draws its fog pass; the copy the batch was drawn with, so the pass meets
+its pixels (a coarse copy whole, though some of its surfaces had the fog
+already: its own triangles are not theirs). Not over cut-out surfaces (the
+fog would cover their holes) */
+static void draw_planar_fog(const struct batch *batch, int coarse)
+{
+	const unsigned short *indices;
+	int count;
+
+	if ((batch->material->texture_flags & R_TEXTURE_ALPHA_TEST) || !dos_planar_fog_reaches(batch->center, batch->radius))
+		return;
+	indices = draw_once(batch, &count);
+	if (!indices)
+		return;
+	if (coarse)
+	{
+		dos_planar_fog_draw(batch->coarse_vertices, batch->coarse_vertex_count, batch->coarse_indices,
+			batch->coarse_triangle_count, batch->material->flags);
+	}
+	else
+	{
+		dos_planar_fog_draw(batch->vertices, batch->vertex_count, indices, count, batch->material->flags);
+	}
+}
+
+/* a batch (indices: the triangles of its own drawn, all of them or some:
+draw_once's; a coarse copy drawn whole) */
+static void draw_batch(const struct batch *batch, int coarse, const unsigned short *indices, int triangle_count)
 {
 	/* (Halo's water on the card: its ripples, reflection and tints) */
 	if (batch->frames && batch->material->water)
 	{
-		dos_water_draw(batch->material, batch->vertices, batch->frames, batch->vertex_count, batch->indices,
-			batch->triangle_count, batch->plane);
+		dos_water_draw(batch->material, batch->vertices, batch->frames, batch->vertex_count, indices, triangle_count,
+			batch->plane);
 		return;
 	}
 	if (coarse)
@@ -1686,8 +1779,8 @@ static void draw_batch(const struct batch *batch, int coarse)
 		r_set_lightmap(batch->lightmap, batch->lightmap_coordinates);
 	if (batch->material->xbox_detail.replace && batch->material->xbox_detail.stage_count)
 		r_set_detail_pass(&batch->material->xbox_detail);
-	r_draw_triangles(batch->vertices, batch->vertex_count, batch->indices, batch->triangle_count, NULL,
-		batch->texture, batch->material->flags);
+	r_draw_triangles(batch->vertices, batch->vertex_count, indices, triangle_count, NULL, batch->texture,
+		batch->material->flags);
 	/* (its detail maps over it, up close) */
 	if ((batch->detail_vertices[0] || batch->detail_vertices[1]) &&
 		r_distance(batch->center) - batch->radius < DETAIL_DISTANCE)
@@ -1696,9 +1789,8 @@ static void draw_batch(const struct batch *batch, int coarse)
 		{
 			if (batch->detail_vertices[k])
 			{
-				r_draw_triangles(batch->detail_vertices[k], batch->vertex_count, batch->indices,
-					batch->triangle_count, NULL, batch->material->detail[k],
-					R_DRAW_DETAIL | (batch->material->flags & R_DRAW_TWO_SIDED));
+				r_draw_triangles(batch->detail_vertices[k], batch->vertex_count, indices, triangle_count, NULL,
+					batch->material->detail[k], R_DRAW_DETAIL | (batch->material->flags & R_DRAW_TWO_SIDED));
 			}
 		}
 	}
@@ -1735,6 +1827,9 @@ static void draw_batches(unsigned long const *visible_clusters, short cluster_co
 		sort.buckets = raw_malloc((size_t)level.batch_count);
 		sort.size = sort.entries && sort.sorted && sort.buckets ? level.batch_count : 0;
 	}
+	/* (a new pass for draw_once: the transparent batches', or the planar
+	fog's over the opaque ones) */
+	level.pass++;
 	for (int c = 0; c < level.cluster_count; c++)
 	{
 		if (visible_clusters && c < cluster_count && !(visible_clusters[c >> 5] & (1UL << (c & 31))))
@@ -1749,10 +1844,21 @@ static void draw_batches(unsigned long const *visible_clusters, short cluster_co
 				continue;
 			near_side = r_distance(batch->center) - batch->radius;
 			coarse = batch->coarse_vertices && near_side > lod.distance;
-			if (transparent || !sort.size)
+			if (transparent)
 			{
-				draw_batch(batch, coarse);
+				int triangles;
+				const unsigned short *indices = draw_once(batch, &triangles);
+
+				/* (a coarse copy whole where none of its surfaces were drawn) */
+				if (indices)
+					draw_batch(batch, coarse && indices == batch->indices, indices, triangles);
+				continue;
+			}
+			if (!sort.size)
+			{
+				draw_batch(batch, coarse, batch->indices, batch->triangle_count);
 				draw_xbox_detail(batch, coarse);
+				draw_planar_fog(batch, coarse);
 				continue;
 			}
 			{
@@ -1773,9 +1879,15 @@ static void draw_batches(unsigned long const *visible_clusters, short cluster_co
 	for (int i = 0; i < count; i++)
 		sort.sorted[starts[sort.buckets[i]]++] = sort.entries[i];
 	for (int i = 0; i < count; i++)
-		draw_batch(&level.batches[sort.sorted[i] >> 1], sort.sorted[i] & 1);
+	{
+		const struct batch *batch = &level.batches[sort.sorted[i] >> 1];
+
+		draw_batch(batch, sort.sorted[i] & 1, batch->indices, batch->triangle_count);
+	}
 	for (int i = 0; i < count; i++)
 		draw_xbox_detail(&level.batches[sort.sorted[i] >> 1], sort.sorted[i] & 1);
+	for (int i = 0; i < count; i++)
+		draw_planar_fog(&level.batches[sort.sorted[i] >> 1], sort.sorted[i] & 1);
 }
 
 void dos_level_draw(unsigned long const *visible_clusters, short cluster_count)
@@ -1787,5 +1899,9 @@ void dos_level_draw(unsigned long const *visible_clusters, short cluster_count)
 behind them must be drawn first) */
 void dos_level_draw_transparent(unsigned long const *visible_clusters, short cluster_count)
 {
+	/* (testing, setting debug_no_transparent: none, to see what is under the
+	water) */
+	if (dos_setting_integer("debug_no_transparent", 0))
+		return;
 	draw_batches(visible_clusters, cluster_count, TRUE);
 }

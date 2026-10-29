@@ -87,6 +87,23 @@ water's plane's normal */
 void dos_water_draw(const struct dos_material *material, const struct r_vertex *vertices, const float *frames,
 	int vertex_count, const unsigned short *indices, int triangle_count, const float *plane_normal);
 void dos_water_dispose(void);
+
+/* Halo's planar fog on the card (dos_planar_fog.c: a fog plane's fog over
+what is under it, the sea's round b30's island; Direct3D 8) */
+
+/* the view's fog: the eye's cluster's, once a view before the level (its
+own fog set already: Halo's atmospheric fog's maximum distance, 0 none) */
+void dos_planar_fog_view(short cluster_index, const struct r_view *view, short sky_index, float air_distance);
+/* whether surfaces in this sphere take it */
+int dos_planar_fog_reaches(const float center[3], float radius);
+/* triangles drawn already (world vertices), the fog over them */
+void dos_planar_fog_draw(const struct r_vertex *vertices, int vertex_count, const unsigned short *indices,
+	int triangle_count, unsigned flags);
+void dos_planar_fog_dispose(void);
+/* the view's atmospheric fog as Halo has it (the sky's): from start to end
+it goes to color (0x00RRGGBB) as far as maximum (0 to 1); FALSE: none */
+int dos_xbox_atmospheric_fog(short local_player_index, short sky_index, const float eye[3], float *start, float *end,
+	float *maximum, unsigned long *color);
 /* a meter material's texture for the object's animation values (its A to D
 functions; NULL: all 1), premultiplied: drawn R_DRAW_ADDITIVE |
 R_DRAW_PREMULTIPLIED; NULL if it cannot be made */
@@ -104,6 +121,10 @@ int dos_xbox_detail(void);
 /* whether every map's sky is its own sky model (Direct3D 8, unless the
 setting d3d_sky = 0), not a stand-in gradient */
 int dos_xbox_sky(void);
+/* whether the fog is Halo's own (Direct3D 8, unless the setting d3d_fog =
+0): the sky's atmospheric fog and the water's planar fog
+(dos_planar_fog.c), not a fade into the sky's colour at the draw distance */
+int dos_xbox_fog(void);
 
 void dos_textures_initialize_for_new_map(void);
 void dos_textures_dispose_from_old_map(void);

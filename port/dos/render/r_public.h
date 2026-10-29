@@ -87,6 +87,10 @@ typedef struct r_texture r_texture;
 #define R_TEXTURE_CLAMP 0x02 /* coordinates outside 0..1 take the edge */
 #define R_TEXTURE_ALPHA 0x04 /* its alpha blends (the screen's quads): kept in the palette */
 #define R_TEXTURE_LARGE 0x08 /* up to 512 texels a side, over the settings' texture size (terrain tiles) */
+/* on a card, its largest level alone (a lookup table, the planar fog's
+density: coordinates far past its edge take the edge, not an average of
+it all from a level the card picks for them) */
+#define R_TEXTURE_ONE_LEVEL 0x10
 
 /* a texture from 32-bit texels (0xAARRGGBB, rows top down), the largest
 level: the renderer shrinks it to its texture size, makes its smaller
@@ -135,6 +139,11 @@ struct r_view
 	fog_color (0x00RRGGBB), solid past fog_end (where nothing is drawn) */
 	float fog_start, fog_end;
 	unsigned long fog_color;
+	/* or, fog_maximum between 0 and 1 (Halo's atmospheric fog on a card's
+	Xbox look: its maximum density), the fog goes only that far by fog_end,
+	stays so to fog_far, and from there reaches all of it at z_far (where
+	nothing is drawn); other values: as above */
+	float fog_maximum, fog_far;
 	/* the sky behind the view: its colour (0x00RRGGBB) at each of
 	R_SKY_STOPS heights above the horizon (0, 15, 30, 50 and 90 degrees),
 	or NULL for none (the frame's clear colour there) */
@@ -306,6 +315,12 @@ struct r_water
 	and whose colour multiplies what is under the water first (multiply) */
 	unsigned long base;
 	int base_alpha, base_multiply;
+	/* with base_alpha, the reflection's share by how squarely the surface
+	is seen: from share_parallel along it to share_perpendicular straight
+	down, half of each along it (Halo's; the tint's row holds it for a card
+	that reads it there); and the base map's alpha on average, for a card
+	that cannot read the map there (pixel shaders 1.1) */
+	float share_parallel, share_perpendicular, base_alpha_mean;
 };
 
 /* 0: this renderer draws Halo's water as an ordinary transparent surface;

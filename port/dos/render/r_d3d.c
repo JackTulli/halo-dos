@@ -71,9 +71,9 @@ indices a triangle into them */
 #define FOG_POLYGON_MAXIMUM 8
 
 /* the room a triangle may take in the batch: its three corners, and the
-pieces the fog may cut it into (three polygons, each a fan) */
-#define TRIANGLE_VERTICES (3 + 3 * FOG_POLYGON_MAXIMUM)
-#define TRIANGLE_INDICES (3 * 3 * (FOG_POLYGON_MAXIMUM - 2))
+pieces the fog may cut it into (five polygons, each a fan) */
+#define TRIANGLE_VERTICES (3 + 5 * FOG_POLYGON_MAXIMUM)
+#define TRIANGLE_INDICES (5 * 3 * (FOG_POLYGON_MAXIMUM - 2))
 
 /* The front end hands a draw's triangles their corners from one array (the
 draw's vertices, each projected once; a corner the near plane cut, from
@@ -95,8 +95,6 @@ struct cached_corner
 	const struct r_raster_vertex *source;
 	unsigned long batch;
 	struct corner_key key;
-	/* its fog factor, before it is clamped (whether a triangle is cut) */
-	float fog;
 	unsigned long index;
 };
 
@@ -144,6 +142,13 @@ static struct
 	double fog_scale;
 	int fog_span;
 	unsigned long fog_color;
+	/* the fog held at its maximum from its end to fog_far, then all of it
+	at the far clip (r_view's fog_maximum: 1 none of that); the depths where
+	the factor bends, nearest first (fogged_triangle cuts there) */
+	float fog_maximum, fog_far;
+	double fog_far_scale;
+	float fog_bends[4];
+	int fog_bend_count;
 	int smooth;
 	/* the batch: its state, texture (and lightmap, or the Xbox's texture
 	pass's stages) and vertices */
@@ -411,7 +416,11 @@ static void texture_upload(struct r_texture *texture)
 	if (!colours)
 		return;
 	for (int w = width, h = height; w > 1 || h > 1; w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1)
+	{
+		if (texture->flags & R_TEXTURE_ONE_LEVEL)
+			break;
 		levels++;
+	}
 	card = g.device.texture_new(width, height, levels, alpha);
 	if (card)
 	{
@@ -620,6 +629,17 @@ static void d3d_water(const struct r_water *water, const struct r_water_vertex *
 				rows[k][2] = normal[k];
 				rows[k][3] = v->eye[k];
 			}
+			/* (the reflection's share here, which the program cannot read:
+			by the eye's way at the vertex, times the base map's alpha on
+			average) */
+			if (water->base_alpha)
+			{
+				float cosine = v->eye[0] * normal[0] + v->eye[1] * normal[1] + v->eye[2] * normal[2];
+				float share = (water->share_parallel * (0.5f - 0.5f * cosine) +
+					water->share_perpendicular * (0.5f + 0.5f * cosine)) * water->base_alpha_mean;
+
+				o->color = (clamp_byte(v->fade * share * 255.0f) << 24) | 0xFFFFFFUL;
+			}
 		}
 	}
 	memset(&card, 0, sizeof(card));
@@ -827,6 +847,28 @@ static void d3d_view_fog(int fogged, float fog_start, float fog_end, unsigned lo
 	g.fog_span = fog_end - fog_start > 1.0e-6f;
 	g.fog_scale = g.fog_span ? 1.0 / ((double)fog_end - (double)fog_start) : 0.0;
 	g.fog_color = fog_color;
+	g.fog_maximum = 1.0f;
+	g.fog_far = fog_end;
+	g.fog_far_scale = 0.0;
+	g.fog_bend_count = 0;
+	if (g.fog_span)
+	{
+		g.fog_bends[g.fog_bend_count++] = fog_start;
+		g.fog_bends[g.fog_bend_count++] = fog_end;
+	}
+}
+
+static void d3d_view_fog_curve(float maximum, float far, float z_far)
+{
+	if (!g.active || !g.fog_span || maximum >= 1.0f || far < g.fog_end || z_far <= far)
+		return;
+	r_d3d_flush();
+	g.fog_maximum = maximum;
+	g.fog_far = far;
+	g.fog_far_scale = 1.0 / ((double)z_far - (double)far);
+	if (far > g.fog_end)
+		g.fog_bends[g.fog_bend_count++] = far;
+	g.fog_bends[g.fog_bend_count++] = z_far;
 }
 
 static void d3d_clear(unsigned long color)
@@ -963,14 +1005,39 @@ fog factor is linear in the depth). The card fogs each pixel by the fog
 factor interpolated between the vertices, clamped at each vertex first: a
 triangle from near to far past the fog's end would come out fogged too
 little between them (OpenGL fogs each pixel by its own depth). So a
-triangle is cut where its factor crosses 0 and 1, and in each piece the
-factor is either exact or the same clamped value throughout. */
+triangle is cut at the depths where the factor bends (the fog's start and
+end; with a fog held short of all, where it rises again and the far clip),
+and in each piece the factor is linear, so exact, or the same throughout. */
 struct fog_vertex
 {
 	struct r_d3d_vertex vertex;
 	float color[4];
 	float fog;
+	/* its depth in the view */
+	float depth;
 };
+
+/* the fog factor at a depth (1 none to 0 all, as the card takes it) */
+static float fog_factor(float z)
+{
+	double fog;
+
+	if (!g.fog_span)
+		return z < g.fog_end ? 1.0f : 0.0f;
+	fog = ((double)z - (double)g.fog_start) * g.fog_scale;
+	fog = fog < 0.0 ? 0.0 : fog > 1.0 ? 1.0 : fog;
+	if (g.fog_maximum < 1.0f)
+	{
+		fog *= g.fog_maximum;
+		if (z > g.fog_far)
+		{
+			double rise = ((double)z - (double)g.fog_far) * g.fog_far_scale;
+
+			fog += (1.0 - fog) * (rise > 1.0 ? 1.0 : rise);
+		}
+	}
+	return (float)(1.0 - fog);
+}
 
 static void fog_vertex_between(const struct fog_vertex *a, const struct fog_vertex *b, float t, struct fog_vertex *out)
 {
@@ -984,11 +1051,12 @@ static void fog_vertex_between(const struct fog_vertex *a, const struct fog_vert
 	out->vertex.lightmap_v = a->vertex.lightmap_v + (b->vertex.lightmap_v - a->vertex.lightmap_v) * t;
 	for (int i = 0; i < 4; i++)
 		out->color[i] = a->color[i] + (b->color[i] - a->color[i]) * t;
-	out->fog = a->fog + (b->fog - a->fog) * t;
+	out->depth = a->depth + (b->depth - a->depth) * t;
+	out->fog = fog_factor(out->depth);
 }
 
-/* the polygon's parts with the factor at most and at least the value */
-static void fog_split(const struct fog_vertex *in, int count, float value, struct fog_vertex *below, int *below_count,
+/* the polygon's parts nearer and farther than a depth */
+static void fog_split(const struct fog_vertex *in, int count, float depth, struct fog_vertex *below, int *below_count,
 	struct fog_vertex *above, int *above_count)
 {
 	*below_count = *above_count = 0;
@@ -996,16 +1064,17 @@ static void fog_split(const struct fog_vertex *in, int count, float value, struc
 	{
 		const struct fog_vertex *a = &in[i], *b = &in[(i + 1) % count];
 
-		if (a->fog <= value)
+		if (a->depth <= depth)
 			below[(*below_count)++] = *a;
-		if (a->fog >= value)
+		if (a->depth >= depth)
 			above[(*above_count)++] = *a;
-		if ((a->fog < value && b->fog > value) || (a->fog > value && b->fog < value))
+		if ((a->depth < depth && b->depth > depth) || (a->depth > depth && b->depth < depth))
 		{
 			struct fog_vertex cut;
 
-			fog_vertex_between(a, b, (value - a->fog) / (b->fog - a->fog), &cut);
-			cut.fog = value;
+			fog_vertex_between(a, b, (depth - a->depth) / (b->depth - a->depth), &cut);
+			cut.depth = depth;
+			cut.fog = fog_factor(depth);
 			below[(*below_count)++] = cut;
 			above[(*above_count)++] = cut;
 		}
@@ -1039,31 +1108,35 @@ static void fog_emit(const struct fog_vertex *polygon, int count)
 		emit_triangle(first, first + i, first + i + 1);
 }
 
-/* whether the factors of a triangle's corners cross 0 or 1 between them
-(where the card's clamped factors would be wrong) */
+/* whether a triangle's corners' depths lie about a bend of the fog factor
+(where the card's interpolated factor would be wrong) */
 static int fog_crosses(float a, float b, float c)
 {
-	return !((a >= 0.0f && a <= 1.0f && b >= 0.0f && b <= 1.0f && c >= 0.0f && c <= 1.0f) ||
-		(a <= 0.0f && b <= 0.0f && c <= 0.0f) || (a >= 1.0f && b >= 1.0f && c >= 1.0f));
+	float nearest = a < b ? (a < c ? a : c) : (b < c ? b : c), farthest = a > b ? (a > c ? a : c) : (b > c ? b : c);
+
+	for (int i = 0; i < g.fog_bend_count; i++)
+	{
+		if (nearest < g.fog_bends[i] && g.fog_bends[i] < farthest)
+			return TRUE;
+	}
+	return FALSE;
 }
 
+/* the triangle in pieces between the bends, nearest first */
 static void fogged_triangle(const struct fog_vertex *triangle)
 {
-	struct fog_vertex beyond[FOG_POLYGON_MAXIMUM], inside[FOG_POLYGON_MAXIMUM];
-	struct fog_vertex fogged[FOG_POLYGON_MAXIMUM], clear[FOG_POLYGON_MAXIMUM];
-	int beyond_count, inside_count, fogged_count, clear_count;
+	struct fog_vertex rest[FOG_POLYGON_MAXIMUM], nearer[FOG_POLYGON_MAXIMUM], farther[FOG_POLYGON_MAXIMUM];
+	int rest_count = 3, nearer_count, farther_count;
 
-	if (!fog_crosses(triangle[0].fog, triangle[1].fog, triangle[2].fog))
+	memcpy(rest, triangle, 3 * sizeof(*rest));
+	for (int i = 0; i < g.fog_bend_count && rest_count >= 3; i++)
 	{
-		fog_emit(triangle, 3);
-		return;
+		fog_split(rest, rest_count, g.fog_bends[i], nearer, &nearer_count, farther, &farther_count);
+		fog_emit(nearer, nearer_count);
+		memcpy(rest, farther, (size_t)farther_count * sizeof(*rest));
+		rest_count = farther_count;
 	}
-	/* (past the fog's end, then the rest: before its start, and between) */
-	fog_split(triangle, 3, 0.0f, beyond, &beyond_count, inside, &inside_count);
-	fog_emit(beyond, beyond_count);
-	fog_split(inside, inside_count, 1.0f, fogged, &fogged_count, clear, &clear_count);
-	fog_emit(fogged, fogged_count);
-	fog_emit(clear, clear_count);
+	fog_emit(rest, rest_count);
 }
 
 /* The corner as the card takes it, before its colour and fog factor are
@@ -1113,17 +1186,18 @@ static float corner_values(const struct r_raster_vertex *v, int kind, int fogged
 	}
 	if (!fogged)
 		return 1.0f;
-	return g.fog_span ? (float)(((double)g.fog_end - (double)z) * g.fog_scale) : z < g.fog_end ? 1.0f : 0.0f;
+	return fog_factor(z);
 }
 
 static void make_corner(const struct r_raster_vertex *v, int kind, int fogged, float alpha, struct fog_vertex *out)
 {
 	out->fog = corner_values(v, kind, fogged, alpha, &out->vertex, out->color);
+	out->depth = 1.0f / v->w;
 }
 
 /* the corner's vertex in the batch (made, or the one made for it before)
-and its fog factor before it is clamped */
-static unsigned long corner_index(const struct r_raster_vertex *v, int kind, int fogged, float alpha, float *fog)
+and its depth (whether its triangle is cut) */
+static unsigned long corner_index(const struct r_raster_vertex *v, int kind, int fogged, float alpha, float *depth)
 {
 	struct cached_corner *slot = &g.corners[((unsigned long)v / sizeof(*v)) % CORNER_CACHE];
 	const unsigned long *bits = (const unsigned long *)v;
@@ -1157,24 +1231,23 @@ static unsigned long corner_index(const struct r_raster_vertex *v, int kind, int
 		slot->key.lightmap_s = bits[15];
 		slot->key.lightmap_t = bits[16];
 		slot->key.alpha = alpha_bits;
-		slot->fog = value;
 		slot->index = g.count++;
 	}
-	*fog = slot->fog;
+	*depth = 1.0f / v->w;
 	return slot->index;
 }
 
 /* a triangle to the batch (its room made by batch_state): its corners' vertices,
-or, where its fog factors cross 0 or 1, the pieces it is cut into */
+or, where they lie about a bend of the fog, the pieces it is cut into */
 static void corners_triangle(const struct r_raster_vertex *const *corners, int kind, int fogged, float alpha)
 {
 	unsigned long a, b, c;
-	float fog_a, fog_b, fog_c;
+	float depth_a, depth_b, depth_c;
 
-	a = corner_index(corners[0], kind, fogged, alpha, &fog_a);
-	b = corner_index(corners[1], kind, fogged, alpha, &fog_b);
-	c = corner_index(corners[2], kind, fogged, alpha, &fog_c);
-	if (!fogged || !fog_crosses(fog_a, fog_b, fog_c))
+	a = corner_index(corners[0], kind, fogged, alpha, &depth_a);
+	b = corner_index(corners[1], kind, fogged, alpha, &depth_b);
+	c = corner_index(corners[2], kind, fogged, alpha, &depth_c);
+	if (!fogged || !fog_crosses(depth_a, depth_b, depth_c))
 	{
 		emit_triangle(a, b, c);
 	}
@@ -1338,7 +1411,10 @@ static void d3d_triangle(const struct r_raster_vertex *a, const struct r_raster_
 	/* (times its lightmap: the level's on the Xbox's look, r_set_lightmap) */
 	state.lightmap = (flags & R_RASTER_LIGHTMAP) && r_lightmap && texture && !detail;
 	batch_state(&state, card, state.lightmap ? (struct r_d3d_texture *)r_lightmap : NULL);
-	corners_triangle(corners, detail ? _corner_detail : _corner_light, state.fog, alpha);
+	/* (an unfogged pass over fogged triangles, the planar fog's, cut where
+	they were: the same pieces, the same depths at each pixel) */
+	corners_triangle(corners, detail ? _corner_detail : _corner_light,
+		state.fog || (g.fogged && (flags & R_DRAW_NO_FOG) && !(flags & R_DRAW_ADDITIVE)), alpha);
 }
 
 static void quad(float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, unsigned long color)
@@ -1662,4 +1738,5 @@ static const struct r_backend d3d_backend =
 	d3d_hardware_cube_new,
 	d3d_draws_water,
 	d3d_water,
+	d3d_view_fog_curve,
 };

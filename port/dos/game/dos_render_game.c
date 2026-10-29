@@ -1017,6 +1017,7 @@ void render_frame(
 		struct render_window *window = &windows[window_index];
 		struct render_camera const *camera = &window->render_camera;
 		struct r_view view;
+		short eye_cluster = NONE;
 
 		if (window->console_window)
 		{
@@ -1061,6 +1062,8 @@ void render_frame(
 		view.fog_color = dos_level_sky_color();
 		view.fog_start = draw_distance * dos_level_fog_start();
 		view.fog_end = draw_distance;
+		view.fog_maximum = 1.0f;
+		view.fog_far = draw_distance;
 		view.sky_colors = dos_level_sky_gradient();
 		view_clusters = NULL;
 		view_cluster_count = 0;
@@ -1076,6 +1079,7 @@ void render_frame(
 				view_clusters = structure_bsp_get_cluster_pvs(bsp, location.cluster_index);
 				view_cluster_count = (short)bsp->clusters.count;
 			}
+			eye_cluster = location.cluster_index;
 		}
 		render.local_player_index = window->local_player_index;
 		render.window_index = window_index;
@@ -1111,6 +1115,35 @@ void render_frame(
 				draw_sky_model(sky_model, &view);
 				view.sky_colors = NULL;
 			}
+		}
+		{
+			/* the fog: on the Xbox's look (Direct3D 8) Halo's own atmospheric
+			fog, the sky's, as far as its maximum density, then all of it in the
+			draw distance's last stretch (Halo draws to 1024 units; past the
+			draw distance here is the sky); then the eye's cluster's water fog
+			over what is under its plane (dos_planar_fog.c) */
+			float start, end, maximum, air_distance = 0.0f;
+			unsigned long color;
+
+			if (dos_xbox_fog() && dos_xbox_atmospheric_fog(window->local_player_index, sky_index_now, view.position,
+				&start, &end, &maximum, &color))
+			{
+				float stretch = draw_distance * 0.85f;
+
+				air_distance = end;
+				/* (a fog longer than the draw distance in it, as it rises) */
+				if (end > stretch)
+				{
+					start *= stretch / end;
+					end = stretch;
+				}
+				view.fog_color = color;
+				view.fog_start = start < end ? start : end - 1.0f;
+				view.fog_end = end;
+				view.fog_maximum = maximum;
+				view.fog_far = stretch;
+			}
+			dos_planar_fog_view(eye_cluster, &view, sky_index_now, air_distance);
 		}
 		r_view_begin(&view);
 		/* the first-person weapon first, in front of everything (its depth

@@ -156,6 +156,11 @@ use the unpacked copy.
     water program; pixel shaders 1.1 to 1.3 (GeForce 3 and 4 Ti) draw it as
     the Xbox did, one tint a draw. Setting d3d_water: 2 (the best the card
     has), 1 (the Xbox's way), 0 (as OPENGL draws it).
+  - DIRECT3D 8's fog is Halo's own: each sky's atmospheric fog (its colour,
+    distances and maximum density; all of it in the draw distance's last
+    stretch) and the planar fog of water seen from above,
+    which hides what is under the surface by its depth (The Silent
+    Cartographer's sea). Setting d3d_fog 0: a fade into the sky's colour.
   - SETTINGS > DISPLAY: WINDOW, FULL SCREEN (at the desktop's resolution)
     or EXCLUSIVE (the screen switched to a mode near the picture's size:
     the fastest on an old PC); SCALING: SHARP, FILL or STRETCH. RESOLUTION

@@ -70,6 +70,9 @@ struct dos_water
 	float angle, velocity, scale;
 	int levels;
 	float fade, lod_bias;
+	/* the base map's alpha, on average (a card that cannot read the map
+	where it draws the reflection: pixel shaders 1.1) */
+	float base_alpha_mean;
 	struct ripple ripples[RIPPLES];
 	/* the card's textures; whether they could be made */
 	unsigned long bump, reflection, tint, base;
@@ -417,6 +420,22 @@ static int make(struct dos_water *water)
 		size = width;
 		for (long i = 0; i < (long)width * height; i++)
 			faces[f][i] |= 0xFF000000UL;
+		/* (testing, setting debug_shaders: each face's mean) */
+		if (dos_setting_integer("debug_shaders", 0))
+		{
+			unsigned long sum[3] = { 0, 0, 0 };
+			char line[160];
+
+			for (long i = 0; i < (long)width * height; i++)
+			{
+				for (int k = 0; k < 3; k++)
+					sum[k] += (faces[f][i] >> (16 - 8 * k)) & 0xFF;
+			}
+			snprintf(line, sizeof(line), "  reflection face %d: %dx%d, mean %02lX%02lX%02lX", f, width, height,
+				sum[0] / ((unsigned long)width * height), sum[1] / ((unsigned long)width * height),
+				sum[2] / ((unsigned long)width * height));
+			system_log(line);
+		}
 	}
 	while ((size >> levels) > 0)
 		levels++;
@@ -438,7 +457,10 @@ static int make(struct dos_water *water)
 	}
 	/* the tint by how squarely the water is seen: along it (0) to straight
 	down (255); its alpha the reflection's share where the base map's alpha
-	modulates it, else whole */
+	modulates it, else whole: Halo's opacity pass's, from the parallel
+	tint's alpha to the perpendicular's by the blue of its normalization
+	cube's texel, which holds the eye's way biased (half again its cosine
+	plus a half: along the water, half of each) */
 	{
 		unsigned long row[TINT_SIZE];
 		int alpha_modulates = (water->flags & 0x0001) != 0;
@@ -449,10 +471,10 @@ static int make(struct dos_water *water)
 		{
 			float t = (float)i / (float)(TINT_SIZE - 1), channel[4];
 
-			for (int k = 0; k < 4; k++)
+			for (int k = 1; k < 4; k++)
 				channel[k] = water->parallel[k] * (1.0f - t) + water->perpendicular[k] * t;
-			if (!alpha_modulates)
-				channel[0] = 1.0f;
+			channel[0] = alpha_modulates ? water->parallel[0] * (0.5f - 0.5f * t) + water->perpendicular[0] * (0.5f + 0.5f * t) :
+				1.0f;
 			row[i] = 0;
 			for (int k = 0; k < 4; k++)
 			{
@@ -472,7 +494,23 @@ static int make(struct dos_water *water)
 		if (texels)
 		{
 			unsigned long *rows[1] = { texels };
+			unsigned long sum[4] = { 0, 0, 0, 0 };
 
+			for (long i = 0; i < (long)width * height; i++)
+			{
+				for (int k = 0; k < 4; k++)
+					sum[k] += (texels[i] >> (24 - 8 * k)) & 0xFF;
+			}
+			water->base_alpha_mean = (float)sum[0] / (255.0f * (float)width * (float)height);
+			if (dos_setting_integer("debug_shaders", 0))
+			{
+				char line[160];
+
+				snprintf(line, sizeof(line), "  base map: %dx%d, mean %02lX%02lX%02lX%02lX", width, height,
+					sum[0] / ((unsigned long)width * height), sum[1] / ((unsigned long)width * height),
+					sum[2] / ((unsigned long)width * height), sum[3] / ((unsigned long)width * height));
+				system_log(line);
+			}
 			water->base = r_hardware_texture_new(rows, &width, &height, 1, TRUE);
 			(free)(texels);
 		}
@@ -543,6 +581,12 @@ void dos_water_draw(const struct dos_material *material, const struct r_vertex *
 	draw.base = water->base;
 	draw.base_alpha = (water->flags & 0x0001) != 0;
 	draw.base_multiply = (water->flags & 0x0002) != 0;
+	if (draw.base_alpha)
+	{
+		draw.share_parallel = water->parallel[0];
+		draw.share_perpendicular = water->perpendicular[0];
+		draw.base_alpha_mean = water->base ? water->base_alpha_mean : 1.0f;
+	}
 	/* (testing, setting debug_water=<frame>: what the water drew with) */
 	if (dos_setting_integer("debug_water", 0) == dos_frame_number())
 	{
@@ -552,11 +596,21 @@ void dos_water_draw(const struct dos_material *material, const struct r_vertex *
 		for (int i = 0; i < BUMP_SIZE * BUMP_SIZE; i++)
 			flat += (water->bump_levels[0][i] & 0xFFFFFF) == 0x8080FF;
 		snprintf(line, sizeof(line), "water draw: %d triangles, bump %lu (texel 0 %08lX, %ld flat), reflection %lu, "
-			"tint %lu %06lX, base %lu, offset %.2f %.2f, first vertex uv %.2f %.2f frame %.2f %.2f %.2f", triangle_count,
-			draw.bump, water->bump_levels[0][0], flat, draw.reflection, draw.tint, draw.tint_color, draw.base,
-			(double)draw.bump_offset[0], (double)draw.bump_offset[1], (double)vertices[0].u, (double)vertices[0].v,
-			(double)frames[0], (double)frames[1], (double)frames[2]);
+			"tint %lu %06lX, base %lu, offset %.2f %.2f, first vertex %.2f %.2f %.2f uv %.2f %.2f frame %.2f %.2f %.2f",
+			triangle_count, draw.bump, water->bump_levels[0][0], flat, draw.reflection, draw.tint, draw.tint_color,
+			draw.base, (double)draw.bump_offset[0], (double)draw.bump_offset[1], (double)vertices[indices[0]].position[0],
+			(double)vertices[indices[0]].position[1], (double)vertices[indices[0]].position[2], (double)vertices[0].u,
+			(double)vertices[0].v, (double)frames[0], (double)frames[1], (double)frames[2]);
 		system_log(line);
+		for (int t = 0; t < triangle_count && t < 4; t++)
+		{
+			const float *a = vertices[indices[t * 3]].position, *b = vertices[indices[t * 3 + 1]].position,
+				*c = vertices[indices[t * 3 + 2]].position;
+
+			snprintf(line, sizeof(line), "  triangle %.1f %.1f %.1f / %.1f %.1f %.1f / %.1f %.1f %.1f", (double)a[0],
+				(double)a[1], (double)a[2], (double)b[0], (double)b[1], (double)b[2], (double)c[0], (double)c[1], (double)c[2]);
+			system_log(line);
+		}
 	}
 	r_draw_water(&draw, vertices, frames, vertex_count, indices, triangle_count);
 }
