@@ -67,6 +67,8 @@
     "network_game_layout.c",
     "network_objects.c",
     "network_rules.c",
+    "line_of_sight.c",
+    "conduct_rules.c",
     "object_bounds_cache.c",
     "pal_tags.c",
     "powerup_timers.c",
@@ -89,7 +91,10 @@
     "chupathingyce/port/linux/src/p2p_lobby.c",
     "chupathingyce/port/linux/src/p2p_probe.c",
     "chupathingyce/port/linux/src/p2p_copies.c",
-    "chupathingyce/port/linux/src/log_address.c"
+    "chupathingyce/port/linux/src/log_address.c",
+    "chupathingyce/port/linux/src/delta.c",
+    "chupathingyce/port/linux/src/delta_compat.c",
+    "chupathingyce/port/linux/src/delta_wire.c"
   ],
   "comment_p2p_sources": "ChupathingyCE's internet play (invites, the encrypted tunnel, MQTT signalling, the game list), polled from the game's loop: tools/dos_hooks.py's internet_play",
   "third_party_sources": [

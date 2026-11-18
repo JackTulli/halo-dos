@@ -126,6 +126,9 @@ def main() -> int:
         add(archive, top + "README.TXT", dos_text(RELEASE / "README.TXT", {"%VERSION%": args.version}))
         add(archive, top + "LICENSE.TXT", dos_text(ROOT / "LICENSE"))
         add(archive, top + "THIRDPTY.TXT", third_party_text())
+        # (ChupathingyCE's signed network version table, read beside the
+        # programs: delta.c; as it is, not a text file)
+        add(archive, top + "DELTA.SIG", (RELEASE / "DELTA.SIG").read_bytes())
         add(archive, top + "MAPS/PUT_MAPS_HERE.TXT", dos_text(RELEASE / "MAPS.TXT"))
         add(archive, top + "MAPS_CE/README.TXT", dos_text(RELEASE / "MAPS_CE.TXT"))
 

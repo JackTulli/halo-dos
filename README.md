@@ -31,7 +31,7 @@ Two programs built from one set of game objects:
 | **`HALO.EXE`** | MS-DOS. 32-bit protected mode through the built-in DOS/32A extender: nothing else to load. VGA 320x200 in 256 colours, or VESA 2.0 modes up to full colour. Sound Blaster, game-port joysticks, a packet-driver network stack (mTCP), and a driver of its own for the 3dfx Voodoo Graphics. |
 | **`HALO95.EXE`** | Windows 95, 98 and Me, and every Windows since (it runs on Windows 11). The same software renderer, or the graphics card through OpenGL 1.1 or Direct3D 8. Up to four controllers (XInput or any Windows joystick), wave-out sound, Winsock 1.1. |
 
-The game itself is [ChupathingyCE](https://github.com/ChupathingyCE/chupathingyce)'s (version 0.8.0d),
+The game itself is [ChupathingyCE](https://github.com/ChupathingyCE/chupathingyce)'s (version 0.9.1a),
 the source port of Halo that grew out of halo-ce-universal. This repository adds a C runtime that
 runs on DOS and Windows 95, a renderer of its own, the DOS and Windows 95 platform layers, a
 menu and HUD drawn with the game's own art, and a client for Halo Custom Edition servers.
@@ -195,8 +195,11 @@ on your LAN. You can also point the `DOSBOX_X` environment variable at any `dosb
 
 ## Playing
 
-The menu works with the keyboard (up/down, left/right, Enter, Escape), the mouse (point, click,
-right-click for back, the wheel to scroll) and controllers (D-pad or stick, A, B).
+The menus are drawn as the Xbox's were, with the art from its own `ui.map`: the main menu's
+items under the logo, the pages' gradient and title bars, the list and option bars, and the
+button key at the bottom right. They work with the keyboard (up/down, left/right, Enter,
+Escape), the mouse (point, click, right-click for back, the wheel to scroll) and controllers
+(D-pad or stick, A, B).
 
 ```
 CAMPAIGN      the ten levels, from The Pillar of Autumn to The Maw
@@ -204,7 +207,12 @@ MULTIPLAYER   ONLINE        quick join, browse games, host a game, players
               SPLIT SCREEN  two to four players on one screen
               CUSTOM GAME   any map and game type, with bots
               FIREFIGHT     waves of the Covenant on a multiplayer map
-SETTINGS      PLAYER  DISPLAY  GRAPHICS  SOUND  CONTROLS  CONTROLLER
+SETTINGS      PLAYER PROFILE  your name and armour
+              GAMEPLAY        field of view, aim assist, FPS counter
+              VIDEO           renderer, resolution, colours, aspect, window, frame rate
+              GRAPHICS        QUALITY, EFFECTS, DIRECT3D 8
+              AUDIO           sound, volume
+              CONTROLS        MOUSE, KEYBOARD, CONTROLLER
 ```
 
 Some settings only take effect when the game starts: the renderer, resolution, colours, aspect,
@@ -212,7 +220,7 @@ double wide/tall, texture quality and sound on/off. They're marked `*` when chan
 **APPLY AND RESTART** saves them and starts the game again. On DOS that needs the game to have
 been started with `PLAY`.
 
-**Default keys** (SETTINGS → CONTROLS changes them; each action takes up to three keys, mouse
+**Default keys** (SETTINGS → CONTROLS → KEYBOARD changes them; each action takes up to three keys, mouse
 buttons or wheel turns):
 
 | Action | Keys | Action | Keys |
@@ -239,9 +247,9 @@ characters of a command line, so put long lists in `HALODOS.CFG`.
 | RESOLUTION, COLOURS | the picture's size, and 8, 16 or 32-bit colour (software) |
 | DOUBLE WIDE / TALL | software: each pixel twice as wide or tall, for slow machines |
 | ASPECT | AUTO, or 4:3 / 16:10 / 16:9 / 21:9 for a monitor that stretches the picture |
-| DISPLAY, SCALING | Windows: window, full screen or exclusive mode; sharp, fill or stretch |
+| DISPLAY, SCALING | Windows (in VIDEO): window, full screen or exclusive mode; sharp, fill or stretch |
 | TEXTURE QUALITY | LOWEST (32 px) to ORIGINAL (Halo's own sizes) |
-| LIGHTMAPS / OBJECT LIGHT / SHADERS | Direct3D 8: XBOX draws as the Xbox did; VERTEX / FLAT / BAKED as OpenGL does |
+| LIGHTMAPS / OBJECT LIGHT / SHADERS / WATER / FOG | GRAPHICS → DIRECT3D 8: XBOX draws as the Xbox did; the others as OpenGL does |
 | VIEW MODEL | the weapon in your hands at fewer triangles (faster), or off |
 | FRAME RATE | 30 as Halo; 60, 120 or uncapped draw frames between the game's ticks |
 
@@ -253,12 +261,12 @@ in them, and its tints, which go from parallel to perpendicular with the viewing
 - **Pixel shaders 1.4** (Radeon 8500 and later): the tint is worked out per pixel from the ripples.
 - **Pixel shaders 1.1–1.3** (GeForce 3, GeForce 4 Ti): the Xbox's own program, one tint a draw.
 
-The `d3d_water` setting picks: 2 the best the card has, 1 the Xbox's way, 0 as OpenGL draws water.
+WATER picks: BEST (the best the card has), XBOX (the Xbox's way) or OPENGL'S.
 
 Direct3D 8's fog is Halo's own too: each sky's atmospheric fog (its colour, distances and maximum
 density, then all of it in the draw distance's last stretch), and the planar fog of
 water seen from above, which hides what lies under the surface by its depth and distance, as on
-The Silent Cartographer's sea. The `d3d_fog` setting 0 fades into the sky's colour instead.
+The Silent Cartographer's sea. FOG: SKY FADE fades into the sky's colour instead.
 
 ## Playing online
 
@@ -340,7 +348,7 @@ Notes:
 - `tools/dos_build.py --help` lists the options: `--llvm`, `--watcom`, `--nxdk`, `--sdk`.
 - If Open Watcom's installer set `INCLUDE` and `LIB` for your account, clear them in the build's
   shell (`$env:INCLUDE = $null; $env:LIB = $null`): clang would read them.
-- The submodule `chupathingyce` stays at ChupathingyCE's v0.8.0d commit. `tools/dos_hooks.py`
+- The submodule `chupathingyce` stays at ChupathingyCE's v0.9.1a commit. `tools/dos_hooks.py`
   makes the port's changes to it, and running it again changes nothing.
 - `tools/dos_stubs.py` regenerates the stand-ins for game functions the port leaves out. Run it
   after adding or removing units.
@@ -364,7 +372,7 @@ Notes:
 
 | Folder | |
 |---|---|
-| `chupathingyce/` | the game (submodule, ChupathingyCE v0.8.0d) |
+| `chupathingyce/` | the game (submodule, ChupathingyCE v0.9.1a) |
 | `port/dos/dos`, `port/dos/win95` | each system's own half: start-up, video, input, sound, network |
 | `port/dos/render` | the renderers |
 | `port/dos/game` | the game-side glue: menus, HUD, level and model drawing, bots, Firefight, split screen, online |

@@ -83,7 +83,7 @@ use the unpacked copy.
   - Mouse: load the DOS mouse driver first (MOUSE.COM, CTMOUSE...).
   - Picture: 320x200 in 256 colours (VGA) by default. Bigger pictures and
     more colours need a VESA 2.0 card with a linear frame buffer (on older
-    cards, UniVBE / SciTech Display Doctor). SETTINGS > DISPLAY.
+    cards, UniVBE / SciTech Display Doctor). SETTINGS > VIDEO.
   - Settings: HALODOS.CFG, written beside HALO.EXE the first time. DOS
     keeps only 126 characters of a command line: put longer option lists in
     HALODOS.CFG.
@@ -101,7 +101,7 @@ use the unpacked copy.
     the usual ports are tried. If it is not found, put the same text in
     HALODOS.CFG as sound_blaster = "A220 I5 D1 H5". HALO.LOG says what was
     found ("sound: Sound Blaster DSP 4.05 at 220 ...").
-  - 3dfx Voodoo: SETTINGS > DISPLAY > RENDERER: 3DFX VOODOO lets a Voodoo
+  - 3dfx Voodoo: SETTINGS > VIDEO > RENDERER: 3DFX VOODOO lets a Voodoo
     Graphics card draw everything at 640x480 (through its pass-through
     cable). It has only been tried on DOSBox-X's emulated Voodoo, not on a
     real card. If a real card does not come up, two settings in HALODOS.CFG
@@ -132,7 +132,7 @@ use the unpacked copy.
   - It needs Windows' TCP/IP (WSOCK32.DLL), even to play alone. Windows 98
     and Me have it; on Windows 95 add it if the game will not start:
     Control Panel, Network, Add, Protocol, Microsoft, TCP/IP.
-  - SETTINGS > DISPLAY > RENDERER:
+  - SETTINGS > VIDEO > RENDERER:
       SOFTWARE     the processor draws, as on DOS
       OPENGL       the graphics card draws through its OpenGL driver
                    (Windows 95 has OpenGL from OSR2, or with Microsoft's
@@ -142,7 +142,8 @@ use the unpacked copy.
     The card renderers draw at the window's own resolution, in full colour,
     with smooth texture filtering. Without a working OpenGL or DirectX 8 the
     game stays with SOFTWARE (HALO.LOG says why).
-  - DIRECT3D 8's Xbox look (SETTINGS > GRAPHICS, shown with that renderer):
+  - DIRECT3D 8's Xbox look (SETTINGS > GRAPHICS > DIRECT3D 8, there with
+    that renderer):
     LIGHTMAPS XBOX (the level lit by Halo's own lightmaps), OBJECT LIGHT
     XBOX (objects and the weapon in your hands lit from the light under
     them) and SHADERS XBOX (the ground's detail maps and the skies' layers
@@ -154,14 +155,14 @@ use the unpacked copy.
     card with pixel shaders. Pixel shaders 1.4 (Radeon 8500 and later)
     tint every pixel by how squarely its ripple is seen, after ATI's ocean
     water program; pixel shaders 1.1 to 1.3 (GeForce 3 and 4 Ti) draw it as
-    the Xbox did, one tint a draw. Setting d3d_water: 2 (the best the card
-    has), 1 (the Xbox's way), 0 (as OPENGL draws it).
+    the Xbox did, one tint a draw. WATER: BEST (the best the card has),
+    XBOX (the Xbox's way) or OPENGL'S.
   - DIRECT3D 8's fog is Halo's own: each sky's atmospheric fog (its colour,
     distances and maximum density; all of it in the draw distance's last
     stretch) and the planar fog of water seen from above,
     which hides what is under the surface by its depth (The Silent
-    Cartographer's sea). Setting d3d_fog 0: a fade into the sky's colour.
-  - SETTINGS > DISPLAY: WINDOW, FULL SCREEN (at the desktop's resolution)
+    Cartographer's sea). FOG: XBOX, or SKY FADE (into the sky's colour).
+  - SETTINGS > VIDEO: WINDOW, FULL SCREEN (at the desktop's resolution)
     or EXCLUSIVE (the screen switched to a mode near the picture's size:
     the fastest on an old PC); SCALING: SHARP, FILL or STRETCH. RESOLUTION
     is the picture's own size: the smaller, the faster (320x240 or 640x480
@@ -180,8 +181,9 @@ use the unpacked copy.
 5. PLAYING
 ----------
 
-  The menu: up/down to choose, left/right to change, Enter to select,
-  Escape to go back. The mouse works too: point, click, right-click to go
+  The menus are drawn as the Xbox's were, in the art of its own ui.map.
+  Up/down to choose, left/right to change, Enter to select, Escape to go
+  back. The mouse works too: point, click, right-click to go
   back, the wheel to scroll. With a controller: the D-pad or left stick, A
   to select, B to go back.
 
@@ -190,14 +192,22 @@ use the unpacked copy.
                   SPLIT SCREEN  two to four players on one screen
                   CUSTOM GAME   any map and game type, with bots
                   FIREFIGHT     waves of Covenant on a multiplayer map
-    SETTINGS      PLAYER, DISPLAY, GRAPHICS, SOUND, CONTROLS, CONTROLLER
+    SETTINGS      PLAYER PROFILE  your name and armour
+                  GAMEPLAY        field of view, aim assist, FPS counter
+                  VIDEO           renderer, resolution, colours, aspect,
+                                  window, frame rate
+                  GRAPHICS        QUALITY (detail, textures, draw distance,
+                                  the weapon in your hands), EFFECTS (level
+                                  light, particles, sky), DIRECT3D 8
+                  AUDIO           sound, volume
+                  CONTROLS        MOUSE, KEYBOARD, CONTROLLER
 
   Settings that only take effect when the game starts (the renderer, the
   resolution, the colours, the aspect, double wide/tall, texture quality,
   sound on/off) are marked * when changed; APPLY AND RESTART saves them and
   starts the game again (on DOS, when it was started with PLAY).
 
-  The keys at first (SETTINGS > CONTROLS changes them):
+  The keys at first (SETTINGS > CONTROLS > KEYBOARD changes them):
 
     W A S D             move              mouse               aim
     left button, shift  fire              right button, G     grenade
@@ -208,16 +218,17 @@ use the unpacked copy.
     Q                   flashlight        F1                  scores
     arrows              turn (no mouse)   escape              pause menu
 
-  SETTINGS > CONTROLS: every action takes up to three keys, mouse buttons
-  or wheel turns. Choose an action and press Enter, then the key (Escape
-  gives up, Delete clears it). Also the mouse speed, invert, and AIM
-  ASSIST (off by default: on, the view's magnetism and the bullets' autoaim
-  help every player, as the console game's do).
+  SETTINGS > CONTROLS > KEYBOARD: every action takes up to three keys,
+  mouse buttons or wheel turns. Choose an action and press Enter, then the
+  key (Escape gives up, Delete clears it). CONTROLS > MOUSE: its speed and
+  invert. SETTINGS > GAMEPLAY > AIM ASSIST (off by default: on, the view's
+  magnetism and the bullets' autoaim help every player, as the console
+  game's do).
 
-  SETTINGS > CONTROLLER: the original game's controller settings: BUTTON
-  LAYOUT (DEFAULT, SOUTHPAW, JUMPY, BOXER, GREEN THUMB, BUMPER JUMPER),
-  THUMBSTICK LAYOUT, LOOK SENSITIVITY (1 to 10; 3 is Halo's), INVERT LOOK,
-  AIM ASSIST, AIRCRAFT CONTROLS and VIBRATION (Windows).
+  SETTINGS > CONTROLS > CONTROLLER: the original game's controller
+  settings: BUTTON LAYOUT (DEFAULT, SOUTHPAW, JUMPY, BOXER, GREEN THUMB,
+  BUMPER JUMPER), THUMBSTICK LAYOUT, LOOK SENSITIVITY (1 to 10; 3 is
+  Halo's), INVERT LOOK, AIRCRAFT CONTROLS and VIBRATION (Windows).
 
   SPLIT SCREEN: each player joins with a device of their own: A (or Start)
   on a controller, Enter on the keyboard (the keyboard and mouse are one
@@ -225,14 +236,15 @@ use the unpacked copy.
   two or more in, go on to ONLINE (all of you in one online game), CUSTOM
   GAME, FIREFIGHT or CAMPAIGN CO-OP (two players, as Halo's).
 
-  SETTINGS > GRAPHICS: DETAIL, DRAW DISTANCE, FIELD OF VIEW (50 to 120; 70
-  is Halo's), TEXTURE QUALITY (LOWEST to ORIGINAL), TEXTURE FILTER, LEVEL
-  LIGHT, VIEW MODEL (the weapon in your hands with fewer triangles is
-  faster), PARTICLES and the SKY. SETTINGS > DISPLAY also has the FRAME RATE
-  (30 as Halo; 60, 120 or UNCAPPED draw frames between the game's 30 ticks
-  a second) and an FPS counter. For slow machines with the software
-  renderer, DOUBLE WIDE and DOUBLE TALL draw each pixel twice as wide or
-  tall (320x200 drawn as 160x200, or 160x100 with both).
+  SETTINGS > GRAPHICS > QUALITY: DETAIL, TEXTURE QUALITY (LOWEST to
+  ORIGINAL), TEXTURE FILTER, DRAW DISTANCE and VIEW MODEL (the weapon in
+  your hands with fewer triangles is faster). GRAPHICS > EFFECTS: LEVEL
+  LIGHT, PARTICLES and the SKY. SETTINGS > GAMEPLAY: FIELD OF VIEW (50 to
+  120; 70 is Halo's) and the FPS counter. SETTINGS > VIDEO has the FRAME
+  RATE (30 as Halo; 60, 120 or UNCAPPED draw frames between the game's 30
+  ticks a second) and, for slow machines with the software renderer,
+  DOUBLE WIDE and DOUBLE TALL, which draw each pixel twice as wide or tall
+  (320x200 drawn as 160x200, or 160x100 with both).
 
 
 6. ONLINE PLAY
@@ -254,6 +266,10 @@ use the unpacked copy.
 
   A hosted game's invite link is written to INVITE.TXT. To join a game by
   its link, put the link in JOIN.TXT beside the program before starting it.
+
+  DELTA.SIG, beside the programs, is ChupathingyCE's signed table of
+  network versions: with it, games of ChupathingyCE 0.9.1a and of OpenCE
+  can be joined and see yours. Keep it there.
 
   Halo Custom Edition servers: the game joins CE 1.10 servers as a CE
   client. It needs Custom Edition's bitmaps.map, sounds.map and loc.map in
@@ -282,8 +298,8 @@ use the unpacked copy.
 8. CREDITS AND LICENCES
 -----------------------
 
-  The game code is ChupathingyCE's (github.com/ChupathingyCE/chupathingyce,
-  GPL-3.0), which grew from halo-ce-universal. This port (DOS, Windows 95,
+  The game code is ChupathingyCE 0.9.1a's (github.com/ChupathingyCE/
+  chupathingyce, GPL-3.0), which grew from halo-ce-universal. This port (DOS, Windows 95,
   the renderers, the Sound Blaster and Voodoo drivers, the Custom Edition
   client) is GPL-3.0 too. The source is at github.com/JackTulli/halo-dos.
 

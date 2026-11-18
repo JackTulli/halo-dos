@@ -35,6 +35,10 @@ void dsound_pump(void);
 
 void platform_log(const char *format, ...) __attribute__((format(printf, 1, 2)));
 
+/* the folder kept files go in (ChupathingyCE's delta.c's signed table):
+the program's (dos_p2p_platform.c) */
+const char *platform_save_root(void);
+
 /* reports an SDK entry point these builds do not implement, once per name;
 the caller then behaves as a failing or empty call */
 void platform_unimplemented(const char *name);

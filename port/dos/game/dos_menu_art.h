@@ -41,6 +41,26 @@ enum dos_art
 	DOS_ART_ARROW_RIGHT,
 	/* console_grafix: none, a console */
 	DOS_ART_CONSOLE,
+	/* the Xbox's pages' own look (their widgets', ui.map): the backdrop's
+	gradient (4x512, stretched over the screen); a list's item bar, the
+	first's and the others' (0 as it is, 1 chosen); the main menu's items
+	(their words drawn: 0 as they are, 1 chosen, glowing) */
+	DOS_ART_GRADIENT,
+	DOS_ART_LIST_ITEM_TOP,
+	DOS_ART_LIST_ITEM,
+	DOS_ART_MENU_CAMPAIGN,
+	DOS_ART_MENU_MULTIPLAYER,
+	DOS_ART_MENU_SETTINGS,
+	/* pages' titles, their words drawn (512x64, the words from 30,32) */
+	DOS_ART_HEADER_LOAD_LEVEL,
+	DOS_ART_HEADER_DIFFICULTY,
+	DOS_ART_HEADER_MULTIPLAYER,
+	DOS_ART_HEADER_SELECT_MAP,
+	DOS_ART_HEADER_SELECT_GAMETYPE,
+	DOS_ART_HEADER_FOUND_GAMES,
+	DOS_ART_HEADER_ENLISTED_PLAYERS,
+	DOS_ART_HEADER_PROFILE_SETTINGS,
+	DOS_ART_HEADER_CONTROLLER,
 	DOS_ART_COUNT
 };
 
@@ -55,6 +75,9 @@ texels fill) drawn in a rectangle of the screen, its colour times color
 (0xFFFFFFFF as it is: the alpha fades it) */
 void dos_art_draw(enum dos_art art, int index, const int *crop, float x0, float y0, float x1, float y1,
 	unsigned long color);
+/* a picture whole, at its own size (a texel a unit, as Halo's widgets
+draw their backgrounds) from x, y; FALSE where it is not there */
+int dos_art_draw_native(enum dos_art art, int index, float x, float y, unsigned long color);
 /* a framed picture scaled in nine parts: its corners border texels big
 drawn border units big, its sides and middle stretched */
 void dos_art_frame(enum dos_art art, int index, const int *crop, int border_texels, float border, float x0, float y0,

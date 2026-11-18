@@ -45,7 +45,25 @@ static const char *const art_tags[DOS_ART_COUNT] =
 	"ui\\shell\\bitmaps\\arrow_sm_left",
 	"ui\\shell\\bitmaps\\arrow_sm_right",
 	"ui\\shell\\bitmaps\\console_grafix",
+	"ui\\shell\\bitmaps\\gradient",
+	"ui\\shell\\bitmaps\\list_item_bkd_top",
+	"ui\\shell\\bitmaps\\list_item_bkd",
+	"ui\\shell\\main_menu\\menu_load_campaign",
+	"ui\\shell\\main_menu\\menu_multiplayer",
+	"ui\\shell\\main_menu\\menu_settings",
+	"ui\\shell\\main_menu\\solo_level_select\\header_load_level",
+	"ui\\shell\\main_menu\\difficulty_select\\header_choose_difficulty",
+	"ui\\shell\\main_menu\\multiplayer_type_select\\header_multiplayer",
+	"ui\\shell\\main_menu\\multiplayer_type_select\\mp_map_select\\header_select_map",
+	"ui\\shell\\main_menu\\gametype_select\\header_select_gametype",
+	"ui\\shell\\main_menu\\multiplayer_type_select\\connected\\server_list\\header_found_games",
+	"ui\\shell\\main_menu\\multiplayer_type_select\\connected\\pregame\\header_enlisted_players",
+	"ui\\shell\\main_menu\\settings_select\\player_setup\\player_profile_edit\\header_edit_profile_settings",
+	"ui\\shell\\main_menu\\settings_select\\player_setup\\player_profile_edit\\controller_edit\\"
+		"header_profile_controller_setting",
 };
+
+typedef char dos_art_tags_complete[sizeof(art_tags) / sizeof(art_tags[0]) == DOS_ART_COUNT ? 1 : -1];
 
 /* the campaign's and the maps' pictures: the left of their bitmaps */
 const int dos_art_picture_crop[4] = { 0, 0, 140, 114 };
@@ -173,6 +191,18 @@ void dos_art_draw(enum dos_art which, int index, const int *crop, float x0, floa
 		return;
 	box = crop ? crop : art[which].box[index];
 	quad(which, index, (float)box[0], (float)box[1], (float)box[2], (float)box[3], x0, y0, x1, y1, color);
+}
+
+int dos_art_draw_native(enum dos_art which, int index, float x, float y, unsigned long color)
+{
+	if (!dos_art_has(which, index))
+		return FALSE;
+	if (color >> 24)
+	{
+		quad(which, index, 0.0f, 0.0f, (float)art[which].width[index], (float)art[which].height[index], x, y,
+			x + (float)art[which].width[index], y + (float)art[which].height[index], color);
+	}
+	return TRUE;
 }
 
 void dos_art_frame(enum dos_art which, int index, const int *crop, int border_texels, float border, float x0,

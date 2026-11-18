@@ -103,15 +103,15 @@ what matters inside 32 of its edges */
 and the chosen row's help (a longer list scrolls) */
 #define LIST_X0 96
 #define LIST_X1 544
-#define LIST_TOP 88
-#define LIST_BOTTOM 392
+#define LIST_TOP 78
+#define LIST_BOTTOM 378
 #define ROW_H 24
 /* the help's line, and the footer's rule over its keys */
-#define HELP_Y 398
-#define FOOTER_Y 432
+#define HELP_Y 382
 #define LINE 2
 
-#define TEXT_COLOR 0xFF8CC0FFUL
+/* (the Xbox's menus' blue, their widgets' text: 0.16, 0.59, 1.0) */
+#define TEXT_COLOR 0xFF2996FFUL
 #define TEXT_BRIGHT 0xFFFFFFFFUL
 #define TEXT_DIM 0xFF6A8CB8UL
 #define CHOSEN_COLOR 0x50306CB8UL
@@ -120,6 +120,15 @@ and the chosen row's help (a longer list scrolls) */
 #define RULE_COLOR 0xC08CC0FFUL
 #define BACKDROP_COLOR 0xA0000410UL
 #define TITLE_BACKDROP_COLOR 0x50000614UL
+/* a page's header (where ui.map has no picture of its words): its place,
+as the Xbox's header pictures put theirs, and its letters' size */
+#define HEADER_X 35
+#define HEADER_Y 11
+#define HEADER_SCALE 1.75f
+/* the button key's line, the Xbox's (in the backdrop's dark band under
+its lower rule): its top and its right end */
+#define KEY_Y 414
+#define KEY_RIGHT 577
 
 /* key repeat: after this long held, every this long (microseconds) */
 #define REPEAT_DELAY 400000ULL
@@ -147,8 +156,9 @@ enum
 	/* the title's MULTIPLAYER: online, split screen, a custom game,
 	Firefight */
 	SCREEN_MULTIPLAYER_MENU,
-	/* the settings' pages: the player, the display, the graphics, the
-	sound (the controls' and the controller's above) */
+	/* the settings' pages: the player, the video (SCREEN_SET_DISPLAY), the
+	graphics, the audio (SCREEN_SET_SOUND); the keyboard's (SCREEN_CONTROLS)
+	and the controller's above */
 	SCREEN_SET_PLAYER,
 	SCREEN_SET_DISPLAY,
 	SCREEN_SET_GRAPHICS,
@@ -156,6 +166,15 @@ enum
 	/* a Custom Edition server being joined (its map downloaded first, when
 	it is not here) */
 	SCREEN_CE_JOIN,
+	/* the settings' sections' own pages: the game's, the graphics' three
+	(quality, effects, DIRECT3D 8's), the controls' (the mouse's, then the
+	keyboard's and the controller's above) */
+	SCREEN_SET_GAMEPLAY,
+	SCREEN_SET_QUALITY,
+	SCREEN_SET_EFFECTS,
+	SCREEN_SET_D3D,
+	SCREEN_SET_INPUT,
+	SCREEN_SET_MOUSE,
 };
 
 /* the rows of each page */
@@ -257,6 +276,15 @@ enum
 	ROW_PLAYERS,
 	/* MULTIPLAYER's custom game (against bots, or split screen's players) */
 	ROW_MP_CUSTOM,
+	/* the settings' sections (each a page) and DIRECT3D 8's water and fog */
+	ROW_SET_GAMEPLAY_PAGE,
+	ROW_SET_QUALITY_PAGE,
+	ROW_SET_EFFECTS_PAGE,
+	ROW_SET_D3D_PAGE,
+	ROW_SET_MOUSE_PAGE,
+	ROW_SET_KEYBOARD_PAGE,
+	ROW_SET_D3D_WATER,
+	ROW_SET_D3D_FOG,
 	/* (the games found: ROW_NET_GAME + their index) */
 	ROW_NET_GAME,
 	/* (the controls page's actions: ROW_BIND + halo_bindings.h's action) */
@@ -385,7 +413,7 @@ static int hit_under_pointer(void)
 /* the settings that take effect only when Halo starts again: changed on the
 settings' pages they wait (menu.pending) for APPLY AND RESTART */
 static const char *const restart_settings[] = { "renderer", "width", "height", "bits", "aspect", "double_wide",
-	"double_tall", "texture_size", "sound" };
+	"double_tall", "texture_size", "sound", "d3d_water" };
 
 static int needs_restart(const char *name)
 {
@@ -630,6 +658,11 @@ large font. */
 
 static long font_large = NONE, font_small = NONE;
 
+/* whether the page drawn is the Xbox's options' kind (its rows settings,
+on dark bars) or a list's (a column of words, the chosen one on a framed
+bar): draw_page decides */
+static int option_page;
+
 static void find_fonts(void)
 {
 	font_large = tag_loaded('font', "ui\\large_ui");
@@ -810,14 +843,21 @@ static void fit_string(long font, const char *string, int width, char *out, int 
 static unsigned long pulsing(void)
 {
 	real k = 0.5f + 0.5f * sinf((real)(system_microseconds() % 1600000ULL) * (6.2831853f / 1600000.0f));
-	unsigned long red = 0x8C + (unsigned long)((real)(0xFF - 0x8C) * k);
-	unsigned long green = 0xC0 + (unsigned long)((real)(0xFF - 0xC0) * k);
+	unsigned long red = 0x29 + (unsigned long)((real)(0xFF - 0x29) * k);
+	unsigned long green = 0x96 + (unsigned long)((real)(0xFF - 0x96) * k);
 
 	return 0xFF000000UL | (red << 16) | (green << 8) | 0xFF;
 }
 
+/* a box chosen: the Xbox's chosen option bar (option_bkds' second: a
+rounded blue outline), else a framed fill */
 static void chosen_box(int x0, int y0, int x1, int y1)
 {
+	if (dos_art_has(DOS_ART_ROW, 1))
+	{
+		dos_art_frame(DOS_ART_ROW, 1, NULL, 8, 7.0f, (float)x0, (float)y0, (float)x1, (float)y1, 0xFFFFFFFFUL);
+		return;
+	}
 	fill(x0, y0, x1, y1, CHOSEN_COLOR);
 	frame_box(x0, y0, x1, y1, FRAME_COLOR);
 }
@@ -864,25 +904,54 @@ static void text_glow(long font, int x0, int y0, int x1, int y1, short justifica
 	text_at(font, x0, y0, x1, y1, justification, argb, string, scale);
 }
 
-/* a page's backdrop (the scene darkened) and its title glowing over a rule
-that fades to the right (a note, the network's word, on the right) */
+/* the backdrop of the Xbox's pages: ui.map's gradient (4x512) at its own
+height, a texel a line, across the whole picture: clear over the title,
+a rule under it (row 70), the page darkening downwards to a second rule
+(409) and a dark band for the button key under that (the scene darkened
+where the map has none) */
+static void backdrop(void)
+{
+	static const int rows[4] = { 0, 0, 4, SCREEN_H };
+	float side = (float)(dos_screen_width - SCREEN_W) * 0.5f;
+
+	if (dos_art_has(DOS_ART_GRADIENT, 0))
+		dos_art_draw(DOS_ART_GRADIENT, 0, rows, -side, 0.0f, (float)SCREEN_W + side, (float)SCREEN_H, 0xFFFFFFFFUL);
+	else
+		fill_across(0, SCREEN_H, BACKDROP_COLOR);
+}
+
+/* the page's title picture (ui.map's header, its words drawn as the Xbox's
+page has them), DOS_ART_COUNT where the Xbox has none for the page */
+static enum dos_art header_art(void)
+{
+	switch (menu.screen)
+	{
+	case SCREEN_MULTIPLAYER_MENU: return DOS_ART_HEADER_MULTIPLAYER;
+	case SCREEN_LOBBY: return DOS_ART_HEADER_ENLISTED_PLAYERS;
+	case SCREEN_SET_PLAYER: return DOS_ART_HEADER_PROFILE_SETTINGS;
+	case SCREEN_CONTROLLER: return DOS_ART_HEADER_CONTROLLER;
+	default: return DOS_ART_COUNT;
+	}
+}
+
+/* a page as the Xbox's are: its backdrop, its title in the top left (the
+Xbox's picture of it, or its words in that look: Halo's large font in the
+menus' blue), sliding in (a note, the network's word, on the right) */
 static void page(const char *title, const char *note)
 {
 	float in = page_in();
-	int x = SAFE_LEFT + 16 - (int)(24.0f * (1.0f - in));
+	int x = HEADER_X - (int)(24.0f * (1.0f - in));
+	enum dos_art header = header_art();
 
-	fill_across(0, SCREEN_H, BACKDROP_COLOR);
-	text_glow(font_large, x, 28, SAFE_RIGHT, 62, JUSTIFY_LEFT, faded(TEXT_BRIGHT, in), faded(GLOW_COLOR, in), title,
-		text_scale() * 1.4f);
-	if (note && note[0])
-		text_fitted(font_help(), SCREEN_W / 2, 38, SAFE_RIGHT - 8, 60, JUSTIFY_RIGHT, faded(TEXT_DIM, in), note);
-	for (int i = 0; i < 12; i++)
+	backdrop();
+	if (header == DOS_ART_COUNT || !dos_art_draw_native(header, 0, (float)x, (float)HEADER_Y, faded(0xFFFFFFFFUL, in)))
 	{
-		int x0 = SAFE_LEFT + 16 + i * (SAFE_RIGHT - SAFE_LEFT - 32) / 12;
-		int x1 = SAFE_LEFT + 16 + (i + 1) * (SAFE_RIGHT - SAFE_LEFT - 32) / 12;
-
-		fill(x0, 68, x1, 68 + LINE, faded(RULE_COLOR, in * (1.0f - (float)i / 12.0f)));
+		text_at_shadowed(font_large, x + 30, HEADER_Y + 33, SAFE_RIGHT, HEADER_Y + 58, JUSTIFY_LEFT,
+			faded(TEXT_COLOR, in), title, HEADER_SCALE * (text_scale() > 1.0f ? 1.1f : 1.0f), FALSE);
 	}
+	if (note && note[0])
+		text_fitted(font_help(), SCREEN_W / 2, HEADER_Y + 34, SAFE_RIGHT - 8, HEADER_Y + 56, JUSTIFY_RIGHT,
+			faded(TEXT_DIM, in), note);
 }
 
 /* ---------- the footer: the buttons of what was used last
@@ -929,15 +998,26 @@ static int key_cap(int x, int y, const char *name, unsigned long color, int draw
 
 	if (draw)
 	{
-		fill(x, y, x + width, y + 20, faded(0xC0081830UL, (float)(color >> 24) / 255.0f));
-		frame_box(x, y, x + width, y + 20, faded(FRAME_COLOR, (float)(color >> 24) / 255.0f));
-		text_at(font, x, y + 1, x + width, y + 19, JUSTIFY_CENTER, color, name, scale * 0.9f);
+		if (dos_art_has(DOS_ART_ROW, 1))
+		{
+			dos_art_frame(DOS_ART_ROW, 1, NULL, 8, 6.0f, (float)x, (float)y, (float)(x + width), (float)(y + 21),
+				faded(0xFFFFFFFFUL, (float)(color >> 24) / 255.0f));
+		}
+		else
+		{
+			fill(x, y, x + width, y + 20, faded(0xC0081830UL, (float)(color >> 24) / 255.0f));
+			frame_box(x, y, x + width, y + 20, faded(FRAME_COLOR, (float)(color >> 24) / 255.0f));
+		}
+		text_at(font, x, y + 1, x + width, y + 20, JUSTIFY_CENTER, color, name, scale * 0.9f);
 	}
 	return width;
 }
 
-/* the footer's hints; both: each with the controller's button and the key
-(the split screen page, read from every device at once) */
+/* the footer's hints (the Xbox's button key: its buttons and words in a
+line ending at the bottom right, the main one, A's, last; the keys'
+directions only where they change a setting); both: each with the
+controller's button and the key (the split screen page, read from every
+device at once) */
 static void footer_drawn(const int *hints, int count, int both)
 {
 	static const char *const words[] = { "SELECT", "BACK", "CHANGE", "CHOOSE", "RESUME", "CONTINUE", "CLEAR", "JOIN",
@@ -947,67 +1027,80 @@ static void footer_drawn(const int *hints, int count, int both)
 	/* (a controller's: xdk_input.c presses the keys for these) */
 	static const char *const pad_buttons[] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "D-PAD",
 		"Y", "X", "BACK", "RB", NULL, NULL, NULL };
-	int pad = pad_used_last(), y = FOOTER_Y + 12, total = 0, x, tries = 0;
-	long font = font_help();
+	int pad = pad_used_last(), y = KEY_Y, total = 0, x, tries = 0, order[24], shown = 0;
+	long font = font_large;
 	real scale = text_scale();
 	float in = page_in();
 
-	fill(SAFE_LEFT, FOOTER_Y, SAFE_RIGHT, FOOTER_Y + LINE, faded(RULE_COLOR, 0.6f));
-	/* (measured, made smaller while it is wider than the screen's middle,
-	then drawn centred) */
+	/* (the order drawn: the main one last, as the Xbox's A is) */
+	for (int last = 0; last < 2; last++)
+	{
+		for (int i = 0; i < count && shown < (int)NUMBEROF(order); i++)
+		{
+			int hint = hints[i];
+			int main_one = hint == HINT_SELECT || hint == HINT_CONTINUE || hint == HINT_JOIN || hint == HINT_KEEP ||
+				hint == HINT_PLAY;
+
+			if (main_one != last || (!both && hint == HINT_CHOOSE) || (!both && hint == HINT_CHANGE && !option_page))
+				continue;
+			order[shown++] = hint;
+		}
+	}
+	/* (measured, made smaller while it is wider than the screen's safe
+	width, then drawn ending at the right) */
 	for (int pass = 0; pass < 2; pass++)
 	{
-		if (pass && total > SAFE_RIGHT - SAFE_LEFT - 16 && tries++ < 3)
+		if (pass && total > KEY_RIGHT - SAFE_LEFT && tries++ < 3)
 		{
-			scale *= (real)(SAFE_RIGHT - SAFE_LEFT - 16) / (real)total;
+			scale *= (real)(KEY_RIGHT - SAFE_LEFT) / (real)total;
 			total = 0;
 			pass = -1;
 			continue;
 		}
-		x = pass ? (SCREEN_W - total) / 2 : 0;
-		for (int i = 0; i < count; i++)
+		x = pass ? KEY_RIGHT - total : 0;
+		for (int i = 0; i < shown; i++)
 		{
-			int hint = hints[i], width, start = x;
+			int hint = order[i], width, start = x;
 
 			if (both)
 			{
 				/* (A, B or START, then the key) */
 				if (hint == HINT_PLAY)
-					width = key_cap(x, y + 1, "START", faded(TEXT_BRIGHT, in), pass, scale);
+					width = key_cap(x, y + 2, "START", faded(TEXT_BRIGHT, in), pass, scale);
 				else
 				{
-					width = 18;
+					width = 20;
 					if (pass)
 					{
 						dos_art_draw(hint == HINT_JOIN ? DOS_ART_BUTTON_A : DOS_ART_BUTTON_B, 0, NULL, (float)x, (float)y,
-							(float)(x + 18), (float)(y + 22), faded(0xFFFFFFFFUL, in));
+							(float)(x + 20), (float)(y + 25), faded(0xFFFFFFFFUL, in));
 					}
 				}
 				x += width + 4;
 				if (pass)
-					text_at(font, x, y + 2, x + 12, y + 20, JUSTIFY_LEFT, faded(TEXT_DIM, in), "/", scale);
+					text_at(font, x, y + 3, x + 12, y + 22, JUSTIFY_LEFT, faded(TEXT_DIM, in), "/", scale);
 				x += text_width(font, "/", scale) + 4;
-				width = key_cap(x, y + 1, keys[hint], faded(TEXT_BRIGHT, in), pass, scale);
+				width = key_cap(x, y + 2, keys[hint], faded(TEXT_BRIGHT, in), pass, scale);
 			}
 			else if (pad && (hint == HINT_SELECT || hint == HINT_CONTINUE || hint == HINT_BACK || hint == HINT_RESUME ||
 				hint == HINT_JOIN || hint == HINT_KEEP || hint == HINT_UNDO || hint == HINT_CANCEL))
 			{
-				/* (Halo's A and B) */
+				/* (Halo's A and B, at their own size) */
 				enum dos_art art = hint == HINT_BACK || hint == HINT_RESUME || hint == HINT_UNDO || hint == HINT_CANCEL ?
 					DOS_ART_BUTTON_B : DOS_ART_BUTTON_A;
 
-				width = 18;
+				width = 20;
 				if (pass)
-					dos_art_draw(art, 0, NULL, (float)x, (float)y, (float)(x + 18), (float)(y + 22), faded(0xFFFFFFFFUL, in));
+					dos_art_draw(art, 0, NULL, (float)x, (float)y, (float)(x + 20), (float)(y + 25), faded(0xFFFFFFFFUL, in));
 			}
 			else if (pad && (hint == HINT_CHANGE || hint == HINT_CHOOSE))
 			{
-				width = key_cap(x, y + 1, hint == HINT_CHANGE ? "STICK LEFT/RIGHT" : "STICK UP/DOWN", faded(TEXT_BRIGHT, in),
+				width = key_cap(x, y + 2, hint == HINT_CHANGE ? "STICK LEFT/RIGHT" : "STICK UP/DOWN", faded(TEXT_BRIGHT, in),
 					pass, scale);
 			}
 			else
 			{
-				width = key_cap(x, y + 1, pad && pad_buttons[hint] ? pad_buttons[hint] : keys[hint], faded(TEXT_BRIGHT, in),
+				width = key_cap(x, y + 2, pad && pad_buttons[hint] ? pad_buttons[hint] : keys[hint], faded(TEXT_BRIGHT, in),
 					pass, scale);
 			}
 			x += width + 6;
@@ -1015,14 +1108,14 @@ static void footer_drawn(const int *hints, int count, int both)
 			{
 				int word = text_width(font, words[hint], scale);
 
-				text_at(font, x, y + 2, x + word, y + 20, JUSTIFY_LEFT, faded(TEXT_COLOR, in), words[hint], scale);
+				text_at(font, x, y + 3, x + word, y + 23, JUSTIFY_LEFT, faded(TEXT_COLOR, in), words[hint], scale);
 			}
-			x += text_width(font, words[hint], scale) + 24;
+			x += text_width(font, words[hint], scale) + 22;
 			/* (each key a click does too) */
 			if (pass)
-				add_hit(start - 4, y - 4, x - 16, y + 26, HIT_HINT, hint);
+				add_hit(start - 4, y - 4, x - 14, y + 28, HIT_HINT, hint);
 		}
-		total = x - 24;
+		total = x - 22;
 	}
 }
 
@@ -1221,13 +1314,13 @@ static void set_rows(int screen)
 		menu.rows[n++] = ROW_BACK;
 		break;
 	case SCREEN_SETTINGS:
+		/* (each section a page of its own) */
 		menu.rows[n++] = ROW_SET_PLAYER;
+		menu.rows[n++] = ROW_SET_GAMEPLAY_PAGE;
 		menu.rows[n++] = ROW_SET_DISPLAY_PAGE;
 		menu.rows[n++] = ROW_SET_GRAPHICS_PAGE;
 		menu.rows[n++] = ROW_SET_SOUND_PAGE;
 		menu.rows[n++] = ROW_SET_CONTROLS;
-		/* (a controller: Windows 95's, or a joystick on DOS's game port) */
-		menu.rows[n++] = ROW_SET_CONTROLLER;
 		if (menu.pending_count)
 			menu.rows[n++] = ROW_SET_APPLY;
 		menu.rows[n++] = ROW_BACK;
@@ -1237,45 +1330,66 @@ static void set_rows(int screen)
 		menu.rows[n++] = ROW_SET_NAME_COLOR;
 		menu.rows[n++] = ROW_BACK;
 		break;
+	case SCREEN_SET_GAMEPLAY:
+		menu.rows[n++] = ROW_SET_FIELD_OF_VIEW;
+		menu.rows[n++] = ROW_SET_AIM_ASSIST;
+		menu.rows[n++] = ROW_SET_FPS;
+		menu.rows[n++] = ROW_BACK;
+		break;
 	case SCREEN_SET_DISPLAY:
 		menu.rows[n++] = ROW_SET_RENDERER;
 		menu.rows[n++] = ROW_SET_RESOLUTION;
 		menu.rows[n++] = ROW_SET_COLOURS;
 		menu.rows[n++] = ROW_SET_ASPECT;
-		/* (the software renderer's: a card draws at its own resolution) */
-		if (!renderer_hardware())
-		{
-			menu.rows[n++] = ROW_SET_DOUBLE_WIDE;
-			menu.rows[n++] = ROW_SET_DOUBLE_TALL;
-		}
 		/* (Windows 95's window or full screen: DOS's is the screen) */
 		if (!on_dos())
 		{
 			menu.rows[n++] = ROW_SET_DISPLAY;
 			menu.rows[n++] = ROW_SET_SCALING;
 		}
+		/* (the software renderer's: a card draws at its own resolution) */
+		if (!renderer_hardware())
+		{
+			menu.rows[n++] = ROW_SET_DOUBLE_WIDE;
+			menu.rows[n++] = ROW_SET_DOUBLE_TALL;
+		}
 		menu.rows[n++] = ROW_SET_FRAME_RATE;
-		menu.rows[n++] = ROW_SET_FPS;
 		if (menu.pending_count)
 			menu.rows[n++] = ROW_SET_APPLY;
 		menu.rows[n++] = ROW_BACK;
 		break;
 	case SCREEN_SET_GRAPHICS:
+		menu.rows[n++] = ROW_SET_QUALITY_PAGE;
+		menu.rows[n++] = ROW_SET_EFFECTS_PAGE;
+		/* (the Xbox's look: DIRECT3D 8's alone) */
+		if (!on_dos() && renderer_windows() == _renderer_direct3d)
+			menu.rows[n++] = ROW_SET_D3D_PAGE;
+		if (menu.pending_count)
+			menu.rows[n++] = ROW_SET_APPLY;
+		menu.rows[n++] = ROW_BACK;
+		break;
+	case SCREEN_SET_QUALITY:
 		menu.rows[n++] = ROW_SET_DETAIL;
-		menu.rows[n++] = ROW_SET_DRAW_DISTANCE;
-		menu.rows[n++] = ROW_SET_FIELD_OF_VIEW;
 		menu.rows[n++] = ROW_SET_TEXTURE_QUALITY;
 		menu.rows[n++] = ROW_SET_TEXTURES;
-		menu.rows[n++] = ROW_SET_LIGHT;
-		if (!on_dos() && renderer_windows() == _renderer_direct3d)
-		{
-			menu.rows[n++] = ROW_SET_D3D_LIGHTMAPS;
-			menu.rows[n++] = ROW_SET_D3D_OBJECT_LIGHT;
-			menu.rows[n++] = ROW_SET_D3D_TEXTURES;
-		}
+		menu.rows[n++] = ROW_SET_DRAW_DISTANCE;
 		menu.rows[n++] = ROW_SET_VIEW_MODEL;
+		if (menu.pending_count)
+			menu.rows[n++] = ROW_SET_APPLY;
+		menu.rows[n++] = ROW_BACK;
+		break;
+	case SCREEN_SET_EFFECTS:
+		menu.rows[n++] = ROW_SET_LIGHT;
 		menu.rows[n++] = ROW_SET_PARTICLES;
 		menu.rows[n++] = ROW_SET_SKY;
+		menu.rows[n++] = ROW_BACK;
+		break;
+	case SCREEN_SET_D3D:
+		menu.rows[n++] = ROW_SET_D3D_LIGHTMAPS;
+		menu.rows[n++] = ROW_SET_D3D_OBJECT_LIGHT;
+		menu.rows[n++] = ROW_SET_D3D_TEXTURES;
+		menu.rows[n++] = ROW_SET_D3D_WATER;
+		menu.rows[n++] = ROW_SET_D3D_FOG;
 		if (menu.pending_count)
 			menu.rows[n++] = ROW_SET_APPLY;
 		menu.rows[n++] = ROW_BACK;
@@ -1287,10 +1401,20 @@ static void set_rows(int screen)
 			menu.rows[n++] = ROW_SET_APPLY;
 		menu.rows[n++] = ROW_BACK;
 		break;
-	case SCREEN_CONTROLS:
+	case SCREEN_SET_INPUT:
+		menu.rows[n++] = ROW_SET_MOUSE_PAGE;
+		menu.rows[n++] = ROW_SET_KEYBOARD_PAGE;
+		/* (a controller: Windows 95's, or a joystick on DOS's game port) */
+		menu.rows[n++] = ROW_SET_CONTROLLER;
+		menu.rows[n++] = ROW_BACK;
+		break;
+	case SCREEN_SET_MOUSE:
 		menu.rows[n++] = ROW_SET_MOUSE;
 		menu.rows[n++] = ROW_SET_INVERT;
-		menu.rows[n++] = ROW_SET_AIM_ASSIST;
+		menu.rows[n++] = ROW_BACK;
+		break;
+	case SCREEN_CONTROLS:
+		/* (the keyboard's: every action's keys) */
 		for (int action = 0; action < DOS_ACTION_COUNT; action++)
 			menu.rows[n++] = ROW_BIND + action;
 		menu.rows[n++] = ROW_BIND_RESET;
@@ -1303,7 +1427,6 @@ static void set_rows(int screen)
 		menu.rows[n++] = ROW_PAD_STICKS;
 		menu.rows[n++] = ROW_PAD_SENSITIVITY;
 		menu.rows[n++] = ROW_PAD_INVERT;
-		menu.rows[n++] = ROW_SET_AIM_ASSIST;
 		menu.rows[n++] = ROW_PAD_AIRCRAFT;
 		/* (the game port's joysticks have no motors) */
 		if (!on_dos())
@@ -1694,6 +1817,13 @@ static void change_value(int row, int delta)
 	case ROW_SET_D3D_TEXTURES:
 		setting_integer("d3d_textures", !menu_integer("d3d_textures", 1));
 		break;
+	case ROW_SET_D3D_WATER:
+		/* (2 the best program the card has, 1 the Xbox's, 0 as OpenGL draws it) */
+		setting_integer("d3d_water", step((int)PIN(menu_integer("d3d_water", 2), 0, 2), delta, 3));
+		break;
+	case ROW_SET_D3D_FOG:
+		setting_integer("d3d_fog", !menu_integer("d3d_fog", 1));
+		break;
 	case ROW_SET_VIEW_MODEL:
 	{
 		/* (in the row's order: 4 very low, 0 low, 1 medium, 2 high, 3 off:
@@ -1978,6 +2108,16 @@ static const char *row_label(int row, char *value, int size, int *stepped)
 	case ROW_SET_D3D_TEXTURES:
 		snprintf(value, size, "%s", menu_integer("d3d_textures", 1) ? "XBOX" : "BAKED");
 		return "SHADERS";
+	case ROW_SET_D3D_WATER:
+	{
+		static const char *const names[] = { "OPENGL'S", "XBOX", "BEST" };
+
+		snprintf(value, size, "%s", names[PIN(menu_integer("d3d_water", 2), 0, 2)]);
+		return "WATER";
+	}
+	case ROW_SET_D3D_FOG:
+		snprintf(value, size, "%s", menu_integer("d3d_fog", 1) ? "XBOX" : "SKY FADE");
+		return "FOG";
 	case ROW_SET_VIEW_MODEL:
 	{
 		static const char *const names[] = { "LOW", "MEDIUM", "HIGH", "OFF", "VERY LOW" };
@@ -2089,10 +2229,16 @@ static const char *row_label(int row, char *value, int size, int *stepped)
 	case ROW_TITLE_QUIT: return "QUIT";
 	case ROW_SET_CONTROLS: return "CONTROLS";
 	case ROW_SET_CONTROLLER: return "CONTROLLER";
-	case ROW_SET_PLAYER: return "PLAYER";
-	case ROW_SET_DISPLAY_PAGE: return "DISPLAY";
+	case ROW_SET_PLAYER: return "PLAYER PROFILE";
+	case ROW_SET_GAMEPLAY_PAGE: return "GAMEPLAY";
+	case ROW_SET_DISPLAY_PAGE: return "VIDEO";
 	case ROW_SET_GRAPHICS_PAGE: return "GRAPHICS";
-	case ROW_SET_SOUND_PAGE: return "SOUND";
+	case ROW_SET_QUALITY_PAGE: return "QUALITY";
+	case ROW_SET_EFFECTS_PAGE: return "EFFECTS";
+	case ROW_SET_D3D_PAGE: return "DIRECT3D 8";
+	case ROW_SET_SOUND_PAGE: return "AUDIO";
+	case ROW_SET_MOUSE_PAGE: return "MOUSE";
+	case ROW_SET_KEYBOARD_PAGE: return "KEYBOARD";
 	case ROW_BIND_RESET: return "RESET TO DEFAULTS";
 	case ROW_PAUSE_RESUME: return "RESUME";
 	case ROW_PAUSE_REVERT: return "REVERT TO CHECKPOINT";
@@ -2175,6 +2321,30 @@ static void edit_begin(void)
 
 static void choose(int row);
 
+/* whether a page is one of the settings' */
+static int settings_screen(int screen)
+{
+	switch (screen)
+	{
+	case SCREEN_SETTINGS:
+	case SCREEN_SET_PLAYER:
+	case SCREEN_SET_GAMEPLAY:
+	case SCREEN_SET_DISPLAY:
+	case SCREEN_SET_GRAPHICS:
+	case SCREEN_SET_QUALITY:
+	case SCREEN_SET_EFFECTS:
+	case SCREEN_SET_D3D:
+	case SCREEN_SET_SOUND:
+	case SCREEN_SET_INPUT:
+	case SCREEN_SET_MOUSE:
+	case SCREEN_CONTROLS:
+	case SCREEN_CONTROLLER:
+		return TRUE;
+	default:
+		return FALSE;
+	}
+}
+
 /* where BACK goes from a page: the page above it, its row that led here
 chosen (split screen's pages and the settings' come back to where they were
 opened from) */
@@ -2222,20 +2392,38 @@ static void go_back(void)
 	case SCREEN_SET_PLAYER:
 		go_to_row(SCREEN_SETTINGS, ROW_SET_PLAYER);
 		break;
+	case SCREEN_SET_GAMEPLAY:
+		go_to_row(SCREEN_SETTINGS, ROW_SET_GAMEPLAY_PAGE);
+		break;
 	case SCREEN_SET_DISPLAY:
 		go_to_row(SCREEN_SETTINGS, ROW_SET_DISPLAY_PAGE);
 		break;
 	case SCREEN_SET_GRAPHICS:
 		go_to_row(SCREEN_SETTINGS, ROW_SET_GRAPHICS_PAGE);
 		break;
+	case SCREEN_SET_QUALITY:
+		go_to_row(SCREEN_SET_GRAPHICS, ROW_SET_QUALITY_PAGE);
+		break;
+	case SCREEN_SET_EFFECTS:
+		go_to_row(SCREEN_SET_GRAPHICS, ROW_SET_EFFECTS_PAGE);
+		break;
+	case SCREEN_SET_D3D:
+		go_to_row(SCREEN_SET_GRAPHICS, ROW_SET_D3D_PAGE);
+		break;
 	case SCREEN_SET_SOUND:
 		go_to_row(SCREEN_SETTINGS, ROW_SET_SOUND_PAGE);
 		break;
-	case SCREEN_CONTROLS:
+	case SCREEN_SET_INPUT:
 		go_to_row(SCREEN_SETTINGS, ROW_SET_CONTROLS);
 		break;
+	case SCREEN_SET_MOUSE:
+		go_to_row(SCREEN_SET_INPUT, ROW_SET_MOUSE_PAGE);
+		break;
+	case SCREEN_CONTROLS:
+		go_to_row(SCREEN_SET_INPUT, ROW_SET_KEYBOARD_PAGE);
+		break;
 	case SCREEN_CONTROLLER:
-		go_to_row(SCREEN_SETTINGS, ROW_SET_CONTROLLER);
+		go_to_row(SCREEN_SET_INPUT, ROW_SET_CONTROLLER);
 		break;
 	case SCREEN_SETTINGS:
 	{
@@ -2309,10 +2497,28 @@ static void choose(int row)
 		go(SCREEN_SET_SOUND);
 		break;
 	case ROW_SET_CONTROLS:
-		go(SCREEN_CONTROLS);
+		go(SCREEN_SET_INPUT);
 		break;
 	case ROW_SET_CONTROLLER:
 		go(SCREEN_CONTROLLER);
+		break;
+	case ROW_SET_GAMEPLAY_PAGE:
+		go(SCREEN_SET_GAMEPLAY);
+		break;
+	case ROW_SET_QUALITY_PAGE:
+		go(SCREEN_SET_QUALITY);
+		break;
+	case ROW_SET_EFFECTS_PAGE:
+		go(SCREEN_SET_EFFECTS);
+		break;
+	case ROW_SET_D3D_PAGE:
+		go(SCREEN_SET_D3D);
+		break;
+	case ROW_SET_MOUSE_PAGE:
+		go(SCREEN_SET_MOUSE);
+		break;
+	case ROW_SET_KEYBOARD_PAGE:
+		go(SCREEN_CONTROLS);
 		break;
 	case ROW_SET_NAME:
 		edit_begin();
@@ -2393,9 +2599,7 @@ static void choose(int row)
 		break;
 	case ROW_BACK:
 		/* (the pause's settings: back to the pause) */
-		if (menu.paused && menu.screen != SCREEN_SETTINGS && menu.screen != SCREEN_SET_PLAYER &&
-			menu.screen != SCREEN_SET_DISPLAY && menu.screen != SCREEN_SET_GRAPHICS && menu.screen != SCREEN_SET_SOUND &&
-			menu.screen != SCREEN_CONTROLS && menu.screen != SCREEN_CONTROLLER)
+		if (menu.paused && !settings_screen(menu.screen))
 		{
 			go(SCREEN_PAUSE);
 			break;
@@ -2431,8 +2635,14 @@ static const char *screen_title(void)
 	case SCREEN_MULTIPLAYER: return "CUSTOM GAME";
 	case SCREEN_FIREFIGHT: return "FIREFIGHT";
 	case SCREEN_SETTINGS: return "SETTINGS";
-	case SCREEN_CONTROLS: return "CONTROLS";
+	case SCREEN_CONTROLS: return "KEYBOARD";
 	case SCREEN_CONTROLLER: return "CONTROLLER";
+	case SCREEN_SET_GAMEPLAY: return "GAMEPLAY";
+	case SCREEN_SET_QUALITY: return "QUALITY";
+	case SCREEN_SET_EFFECTS: return "EFFECTS";
+	case SCREEN_SET_D3D: return "DIRECT3D 8";
+	case SCREEN_SET_INPUT: return "CONTROLS";
+	case SCREEN_SET_MOUSE: return "MOUSE";
 	case SCREEN_SPLIT: return "SPLIT SCREEN";
 	case SCREEN_SPLIT_GAME: return "SPLIT SCREEN";
 	case SCREEN_RESULTS: return "RESULTS";
@@ -2442,10 +2652,10 @@ static const char *screen_title(void)
 	case SCREEN_NET_JOIN: return "BROWSE GAMES";
 	case SCREEN_CE_JOIN: return "JOINING";
 	case SCREEN_MULTIPLAYER_MENU: return "MULTIPLAYER";
-	case SCREEN_SET_PLAYER: return "PLAYER";
-	case SCREEN_SET_DISPLAY: return "DISPLAY";
+	case SCREEN_SET_PLAYER: return "PLAYER PROFILE";
+	case SCREEN_SET_DISPLAY: return "VIDEO";
 	case SCREEN_SET_GRAPHICS: return "GRAPHICS";
-	case SCREEN_SET_SOUND: return "SOUND";
+	case SCREEN_SET_SOUND: return "AUDIO";
 	case SCREEN_LOBBY: return "LOBBY";
 	}
 	return "";
@@ -2462,7 +2672,9 @@ static void row_help(int row, char *help, int size)
 	switch (row)
 	{
 	case ROW_TITLE_CAMPAIGN: line = "THE STORY, LEVEL BY LEVEL"; break;
-	case ROW_SET_CONTROLS: line = "THE KEYS AND MOUSE BUTTONS OF EVERY ACTION"; break;
+	case ROW_SET_CONTROLS: line = "THE MOUSE, THE KEYBOARD'S KEYS AND A CONTROLLER"; break;
+	case ROW_SET_MOUSE_PAGE: line = "HOW FAST THE MOUSE TURNS, AND WHICH WAY IT LOOKS UP"; break;
+	case ROW_SET_KEYBOARD_PAGE: line = "THE KEYS AND MOUSE BUTTONS OF EVERY ACTION"; break;
 	case ROW_SET_CONTROLLER:
 		line = on_dos() ? "A JOYSTICK ON THE GAME PORT: ITS LAYOUT AND SENSITIVITY" :
 			"A GAME CONTROLLER: ITS LAYOUT AND SENSITIVITY";
@@ -2505,9 +2717,22 @@ static void row_help(int row, char *help, int size)
 	case ROW_TITLE_NETWORK: line = "QUICK JOIN, THE GAMES ON THE LAN AND THE INTERNET, OR HOST ONE"; break;
 	case ROW_TITLE_SETTINGS: line = "YOUR NAME AND ARMOUR, THE DISPLAY, GRAPHICS, SOUND, CONTROLS"; break;
 	case ROW_SET_PLAYER: line = "YOUR NAME AND ARMOUR COLOUR"; break;
+	case ROW_SET_GAMEPLAY_PAGE: line = "THE FIELD OF VIEW, AIM ASSIST AND THE FRAME RATE COUNTER"; break;
 	case ROW_SET_DISPLAY_PAGE: line = "THE RENDERER, RESOLUTION, COLOURS, SCREEN SHAPE, FRAME RATE"; break;
-	case ROW_SET_GRAPHICS_PAGE: line = "DETAIL, DRAW DISTANCE, FIELD OF VIEW, TEXTURES, LIGHT, EFFECTS"; break;
+	case ROW_SET_GRAPHICS_PAGE: line = "QUALITY, EFFECTS, AND DIRECT3D 8'S XBOX LOOK"; break;
+	case ROW_SET_QUALITY_PAGE: line = "DETAIL, TEXTURES, DRAW DISTANCE AND THE WEAPON IN YOUR HANDS"; break;
+	case ROW_SET_EFFECTS_PAGE: line = "THE LEVEL'S LIGHT, PARTICLES AND THE SKY"; break;
+	case ROW_SET_D3D_PAGE: line = "LIGHTMAPS, LIT OBJECTS, SHADERS, WATER AND FOG AS THE XBOX DREW THEM"; break;
 	case ROW_SET_SOUND_PAGE: line = "SOUND ON OR OFF, AND HOW LOUD"; break;
+	case ROW_SET_D3D_WATER:
+		line = menu_integer("d3d_water", 2) == 2 ? "HALO'S RIPPLES AND REFLECTION, TINTED AT EVERY PIXEL: FROM THE NEXT START" :
+			menu_integer("d3d_water", 2) == 1 ? "HALO'S RIPPLES AND REFLECTION, AS THE XBOX DREW THEM: FROM THE NEXT START" :
+			"WATER AS OPENGL DRAWS IT: FROM THE NEXT START";
+		break;
+	case ROW_SET_D3D_FOG:
+		line = menu_integer("d3d_fog", 1) ? "HALO'S OWN FOG, AND THE WATER'S FOG OVER WHAT IS UNDER IT" :
+			"A FADE INTO THE SKY'S COLOUR AT THE DRAW DISTANCE";
+		break;
 	case ROW_SET_NAME: line = menu.editing ? "TYPE IT. ENTER: KEEP IT, ESC: AS IT WAS. A PAD: UP/DOWN A LETTER, LEFT/RIGHT MOVE" :
 		"THE NAME OTHER PLAYERS SEE ONLINE"; break;
 	case ROW_SET_APPLY: line = "THE CHANGES MARKED * NEED HALO STARTED AGAIN: SAVED, AND IT STARTS AGAIN NOW"; break;
@@ -2697,9 +2922,11 @@ static int first_shown(int shown)
 	return menu.first_row;
 }
 
-/* a row: a dark bar (Halo's option background), a setting's name on its
-left and its value on its right (glowing when chosen), or a button
-(centred); the chosen row's frame is drawn by the page, gliding */
+/* a row as the Xbox's: on an options page, a dark bar (option_bkds'
+first), the setting's name on its left and its value in the right part
+(where the Xbox's spinner is), glowing when chosen, or a button's word on
+the left; on a list page, the word alone (the chosen one's bar is drawn by
+the page, gliding) */
 static void draw_row(int index, int y)
 {
 	int row = menu.rows[index], chosen = index == menu.row, stepped;
@@ -2709,42 +2936,51 @@ static void draw_row(int index, int y)
 	int x0 = list_x0 - (int)(24.0f * (1.0f - in)), x1 = list_x1 - (int)(24.0f * (1.0f - in));
 	unsigned long color = faded(chosen ? TEXT_BRIGHT : TEXT_COLOR, in);
 
-	dos_art_frame(DOS_ART_ROW, 0, NULL, 6, 5.0f, (float)x0, (float)(y - 2), (float)x1, (float)(y + ROW_H + 2),
-		faded(0xD0FFFFFFUL, in));
+	if (option_page && !chosen)
+	{
+		dos_art_frame(DOS_ART_ROW, 0, NULL, 8, 7.0f, (float)x0, (float)(y - 2), (float)x1, (float)(y + ROW_H + 2),
+			faded(0xFFFFFFFFUL, in));
+	}
+	text(font_large, x0 + 13, y, x1, y + ROW_H, JUSTIFY_LEFT, color, label);
 	if (stepped || value[0])
 	{
-		int label_width = text_width(font_large, label, text_scale());
-		int room = x1 - x0 - 28 - label_width - 16, value_right = x1 - 12;
+		int label_right = x0 + 13 + text_width(font_large, label, text_scale()) + 16;
+		/* (the value's place: centred from 56% of the bar, the Xbox's
+		spinner's; a value too long for it from the name's end, to the
+		right) */
+		int value_x0 = x0 + (x1 - x0) * 56 / 100, value_x1 = x1 - 10;
+		short justify = JUSTIFY_CENTER;
 
-		text(font_large, x0 + 12, y, x1, y + ROW_H, JUSTIFY_LEFT, color, label);
+		if (value_x0 < label_right)
+			value_x0 = label_right;
 		/* (a setting waiting for APPLY AND RESTART: marked) */
 		snprintf(shown, sizeof(shown), "%s%s", value, row_pending(row) ? " *" : "");
+		if (text_width(font_large, shown, text_scale()) > value_x1 - value_x0)
+		{
+			value_x0 = label_right;
+			justify = JUSTIFY_RIGHT;
+		}
 		/* (a long value cut short of the name: the panel says it whole) */
-		if (text_width(font_large, shown, text_scale()) > room)
+		if (text_width(font_large, shown, text_scale()) > value_x1 - value_x0)
 		{
 			char whole[96];
 
 			snprintf(whole, sizeof(whole), "%s", shown);
-			fit_string(font_large, whole, room, shown, sizeof(shown));
+			fit_string(font_large, whole, value_x1 - value_x0, shown, sizeof(shown));
 		}
 		if (chosen)
-			text_glow(font_large, x0, y, value_right, y + ROW_H, JUSTIFY_RIGHT, faded(TEXT_BRIGHT, in),
-				faded(GLOW_COLOR, in), shown, text_scale());
+		{
+			text_glow(font_large, value_x0, y, value_x1, y + ROW_H, justify, faded(TEXT_BRIGHT, in), faded(GLOW_COLOR, in),
+				shown, text_scale());
+		}
 		else
-			text(font_large, x0, y, value_right, y + ROW_H, JUSTIFY_RIGHT, faded(TEXT_COLOR, in), shown);
-	}
-	else if (chosen)
-	{
-		text_glow(font_large, x0, y, x1, y + ROW_H, JUSTIFY_CENTER, color, faded(GLOW_COLOR, in), label, text_scale());
-	}
-	else
-	{
-		text(font_large, x0, y, x1, y + ROW_H, JUSTIFY_CENTER, color, label);
+			text(font_large, value_x0, y, value_x1, y + ROW_H, justify, faded(TEXT_COLOR, in), shown);
 	}
 }
 
-/* the chosen row's frame (Halo's framed bar), gliding to the row: drawn
-over the rows' bars, under their text */
+/* the chosen row's bar (the Xbox's: an options page's outlined bar, a
+list's framed item, list_item_bkd's second, its first row's the top
+one), gliding to the row: drawn under the rows' words */
 static void draw_highlight(int y, float in)
 {
 	unsigned long long now = system_microseconds();
@@ -2760,9 +2996,19 @@ static void draw_highlight(int y, float in)
 	else
 		menu.highlight_y += ((float)y - menu.highlight_y) * (dt > 0.04f ? 1.0f : 1.0f - expf(-dt * 40.0f));
 	menu.highlight_screen = menu.screen;
-	fill(x0 + 3, (int)menu.highlight_y - 1, x1 - 3, (int)menu.highlight_y + ROW_H + 1, faded(CHOSEN_COLOR, in));
-	dos_art_frame(DOS_ART_ROW, 1, NULL, 6, 5.0f, (float)(x0 - 2), menu.highlight_y - 4.0f, (float)(x1 + 2),
-		menu.highlight_y + (float)ROW_H + 4.0f, faded(0xFFFFFFFFUL, in));
+	if (option_page || !dos_art_has(DOS_ART_LIST_ITEM, 1))
+	{
+		chosen_box(x0, (int)menu.highlight_y - 2, x1, (int)menu.highlight_y + ROW_H + 2);
+		return;
+	}
+	{
+		static const int crop[4] = { 0, 0, 233, 32 };
+		enum dos_art art = menu.row == 0 && dos_art_has(DOS_ART_LIST_ITEM_TOP, 1) ? DOS_ART_LIST_ITEM_TOP :
+			DOS_ART_LIST_ITEM;
+
+		dos_art_frame(art, 1, crop, 10, 10.0f, (float)x0, menu.highlight_y - 4.0f, (float)x1,
+			menu.highlight_y + (float)ROW_H + 4.0f, faded(0xFFFFFFFFUL, in));
+	}
 }
 
 /* lines of text in a box, broken at spaces to fit its width; the y after
@@ -2927,9 +3173,9 @@ whose it is. F opens the FILTERS box over it. */
 #define GAME_X0 (SAFE_LEFT + 8)
 #define GAME_X1 (SAFE_RIGHT - 8)
 /* the tabs' line and the heads' under it: the games start below */
-#define TABS_Y (LIST_TOP - 10)
-#define HEADS_Y (LIST_TOP + 14)
-#define GAMES_TOP (LIST_TOP + 36)
+#define TABS_Y (LIST_TOP - 2)
+#define HEADS_Y (LIST_TOP + 22)
+#define GAMES_TOP (LIST_TOP + 44)
 
 static const char *const show_tabs[NUMBER_OF_DOS_SHOWS] = { "ALL", "ONLINE", "CHUPATHINGY", "OPEN CE", "CE SERVERS",
 	"LAN" };
@@ -3104,40 +3350,48 @@ static void draw_lobby(int y)
 	}
 }
 
-/* The title: the scene clear (a shade only under the menu), Halo's logo,
-and its items glowing as Halo's do, the chosen one bright */
+/* The title, the Xbox's main menu: the scene clear, Halo's logo across
+it, its items (ui.map's pictures of their words: dim, and glowing when
+chosen) centred under it, and the program's name where the Xbox's has its
+build's, small at the bottom right */
 static void draw_title(void)
 {
-	static const int hints[] = { HINT_CHOOSE, HINT_SELECT };
-	int dos = on_dos();
 	float in = page_in();
-	real scale = text_scale() * 1.2f;
+	int dos = on_dos();
 
-	/* (the shade: deeper toward the bottom) */
-	for (int i = 0; i < 10; i++)
-		fill_across(200 + i * 28, 228 + i * 28, (unsigned long)(0x10 + i * 0x0E) << 24 | 0x000410UL);
-	/* (the logo's letters are the middle third of its picture) */
-	if (!draw_logo(SCREEN_W / 2, 4, 560))
-		text_at(font_large, 0, 100, SCREEN_W, 140, JUSTIFY_CENTER, TEXT_BRIGHT, "HALO", 2.5f);
-	text(font_help(), 0, 178, SCREEN_W, 200, JUSTIFY_CENTER, TEXT_DIM, dos ? "FOR MS-DOS" : "FOR WINDOWS 95");
+	if (!draw_logo(SCREEN_W / 2, 28, SCREEN_W))
+		text_at(font_large, 0, 120, SCREEN_W, 190, JUSTIFY_CENTER, TEXT_BRIGHT, "HALO", 3.0f);
 	for (int i = 0; i < menu.row_count; i++)
 	{
-		int y = 224 + i * 36, chosen = i == menu.row, stepped;
+		int y = 247 + i * 36, chosen = i == menu.row, row = menu.rows[i], stepped;
+		enum dos_art art = row == ROW_TITLE_CAMPAIGN ? DOS_ART_MENU_CAMPAIGN : row == ROW_TITLE_MULTIPLAYER ?
+			DOS_ART_MENU_MULTIPLAYER : row == ROW_TITLE_SETTINGS ? DOS_ART_MENU_SETTINGS : DOS_ART_COUNT;
 		char value[8];
-		const char *label = row_label(menu.rows[i], value, sizeof(value), &stepped);
+		const char *label;
 
-		add_hit(SCREEN_W / 2 - 150, y - 4, SCREEN_W / 2 + 150, y + ROW_H + 8, HIT_ROW, i);
+		/* (the pictures are 256x64, their words in the top half) */
+		add_hit(SCREEN_W / 2 - 110, y + 1, SCREEN_W / 2 + 110, y + 33, HIT_ROW, i);
+		if (art != DOS_ART_COUNT && dos_art_draw_native(art, chosen, (float)(SCREEN_W / 2 - 128), (float)y,
+			faded(0xFFFFFFFFUL, in)))
+		{
+			continue;
+		}
+		/* (an item ui.map has no picture of, QUIT: its word in the
+		pictures' look, the menus' blue at half, white glowing chosen) */
+		label = row_label(row, value, sizeof(value), &stepped);
 		if (chosen)
 		{
-			text_glow(font_large, 0, y, SCREEN_W, y + ROW_H + 4, JUSTIFY_CENTER, TEXT_BRIGHT, faded(GLOW_COLOR, 1.4f),
-				label, scale);
+			text_glow(font_large, 0, y + 4, SCREEN_W, y + 29, JUSTIFY_CENTER, faded(TEXT_BRIGHT, in),
+				faded(0xA04898FFUL, in), label, 1.6f);
 		}
 		else
 		{
-			text_at(font_large, 0, y, SCREEN_W, y + ROW_H + 4, JUSTIFY_CENTER, faded(0xFF5A8CDCUL, in), label, scale);
+			text_at_shadowed(font_large, 0, y + 4, SCREEN_W, y + 29, JUSTIFY_CENTER, faded(0x7820A0F8UL, in), label, 1.6f,
+				FALSE);
 		}
 	}
-	footer(hints, NUMBEROF(hints));
+	text_at_shadowed(font_small, 0, 424, 580, 440, JUSTIFY_RIGHT, faded(0xC0A8A4B0UL, in),
+		dos ? "HALO FOR MS-DOS" : "HALO FOR WINDOWS 95", 1.0f, FALSE);
 }
 
 static void draw_results(void)
@@ -3504,7 +3758,7 @@ static void draw_split(void)
 	const struct system_input *input = dos_input();
 	float in = page_in();
 	int count = dos_split_count(), width = (SAFE_RIGHT - SAFE_LEFT - 8 - 3 * 10) / 4;
-	int y0 = LIST_TOP - 4, y1 = 372, first_open = TRUE;
+	int y0 = LIST_TOP - 4, y1 = 352, first_open = TRUE;
 	char line[160];
 
 	/* (the controllers found, at the title's right) */
@@ -3741,6 +3995,7 @@ static void draw_ce_join(void)
 	/* (CANCEL, or BACK once the join is over) */
 	list_x0 = SCREEN_W / 2 - 110;
 	list_x1 = SCREEN_W / 2 + 110;
+	option_page = TRUE;
 	draw_highlight(340, in);
 	draw_row(0, 340);
 	add_hit(list_x0, 337, list_x1, 340 + ROW_H + 3, HIT_ROW, 0);
@@ -3799,6 +4054,20 @@ static void draw_page(void)
 	}
 	in = page_in();
 	panel = has_panel();
+	/* (an options page: any row with a value, and the game list, whose
+	games are bars too; else a list) */
+	option_page = menu.screen == SCREEN_NET_JOIN;
+	for (int i = 0; i < menu.row_count && !option_page; i++)
+	{
+		char value[80];
+		int stepped;
+
+		row_label(menu.rows[i], value, sizeof(value), &stepped);
+		if (stepped || value[0])
+			option_page = TRUE;
+	}
+	/* (the Xbox's steps: a list's items 33 apart, options 30) */
+	step = menu.screen == SCREEN_NET_JOIN ? 28 : option_page ? 30 : 33;
 	/* (the network's word on the right of the title, in capitals) */
 	note[0] = 0;
 	if (menu.screen == SCREEN_NET_JOIN || menu.screen == SCREEN_LOBBY)
@@ -3816,7 +4085,9 @@ static void draw_page(void)
 	pause's narrower) */
 	if (panel)
 	{
-		list_x0 = SAFE_LEFT + 16;
+		/* (the Xbox's column: its lists' items from 51, its options' bars
+		from 54) */
+		list_x0 = option_page ? 54 : 51;
 		list_x1 = 372;
 		draw_panel(388, top - 4, SAFE_RIGHT - 8, bottom + 6);
 	}
@@ -3825,7 +4096,7 @@ static void draw_page(void)
 		list_x0 = SCREEN_W / 2 - 150;
 		list_x1 = SCREEN_W / 2 + 150;
 		dos_art_frame(DOS_ART_ALERT, 0, NULL, 16, 10.0f, (float)(list_x0 - 24), (float)(top - 4), (float)(list_x1 + 24),
-			(float)(top + menu.row_count * 32 + 16), faded(0xF0FFFFFFUL, in));
+			(float)(top + menu.row_count * step + 16), faded(0xF0FFFFFFUL, in));
 		top += 8;
 	}
 	else if (menu.screen == SCREEN_NET_JOIN)
@@ -3857,8 +4128,10 @@ static void draw_page(void)
 	}
 	/* (the lobby's players under its rows) */
 	if (menu.screen == SCREEN_LOBBY)
-		bottom = top + menu.row_count * 32;
-	step = menu.screen == SCREEN_NET_JOIN ? 28 : menu.row_count * 32 <= bottom - top ? 32 : 30;
+		bottom = top + menu.row_count * step;
+	/* (a list too long for its steps: the options') */
+	if (step == 33 && menu.row_count * 33 > bottom - top)
+		step = 30;
 	shown = (bottom - top) / step;
 	first = first_shown(shown);
 	if (menu.screen == SCREEN_NET_JOIN && !menu.game_count)

@@ -186,6 +186,18 @@ int config_default(const char *name, char *text, size_t size)
 	return 1;
 }
 
+/* whether the player chose the setting (it is in the settings file, by
+either name), not the game's default */
+int config_chosen(const char *name)
+{
+	for (unsigned i = 0; i < sizeof(aliases) / sizeof(aliases[0]); i++)
+	{
+		if (!strcmp(aliases[i].game, name) && dos_setting(aliases[i].own, NULL) != NULL)
+			return 1;
+	}
+	return dos_setting(name, NULL) != NULL;
+}
+
 int config_set(const char *name, const char *value)
 {
 	dos_setting_set(name, value);

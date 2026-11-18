@@ -810,6 +810,8 @@ extern float dos_screen_offset_x;
 float dos_screen_centred_offset(void);
 long halo_screen_width(void) { return dos_screen_width; }
 float halo_pixel_aspect(void) { return 1.f; }
+/* (the HUD at the 640x480 screen's own size: the renderer scales it) */
+float halo_screen_scale(void) { return 1.f; }
 float halo_screen_texture_scale_x(void) { return 1.f; }
 float halo_screen_texture_scale_y(void) { return 1.f; }
 int halo_performance_mode(void) { return 1; }

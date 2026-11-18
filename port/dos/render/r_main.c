@@ -193,6 +193,10 @@ static struct
 	float centre_x, centre_y;
 	/* the half-widths of the view at z = 1, for culling */
 	float tangent_x, tangent_y;
+	/* the side planes' normals' lengths over their tangents' (sqrt(1 +
+	tangent^2)): a sphere's radius pushes them out by this much, worked out
+	once a view (halo-64's frustum planes) */
+	float secant_x, secant_y;
 	float far;
 	int fogged;
 	float fog_scale;
@@ -314,6 +318,8 @@ void r_view_begin(const struct r_view *description)
 	view.centre_y = (float)description->y0 + height * 0.5f;
 	view.tangent_x = width * 0.5f / view.focal_x;
 	view.tangent_y = height * 0.5f / view.focal;
+	view.secant_x = sqrtf(1.0f + view.tangent_x * view.tangent_x);
+	view.secant_y = sqrtf(1.0f + view.tangent_y * view.tangent_y);
 	view.far = description->fog_end > 0.0f ? description->fog_end : description->z_far;
 	view.fogged = description->fog_end > description->fog_start && description->fog_end > 0.0f;
 	view.fog_scale = view.fogged ? 1.0f / (description->fog_end - description->fog_start) : 0.0f;
@@ -369,9 +375,9 @@ int r_sphere_visible(const float center[3], float radius)
 		return 0;
 	/* the side planes: |x| <= z * tangent, pushed out by the radius along
 	their normals */
-	if (fabsf(x) - z * view.tangent_x > radius * sqrtf(1.0f + view.tangent_x * view.tangent_x))
+	if (fabsf(x) - z * view.tangent_x > radius * view.secant_x)
 		return 0;
-	if (fabsf(y) - z * view.tangent_y > radius * sqrtf(1.0f + view.tangent_y * view.tangent_y))
+	if (fabsf(y) - z * view.tangent_y > radius * view.secant_y)
 		return 0;
 	return 1;
 }

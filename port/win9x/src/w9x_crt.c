@@ -454,171 +454,34 @@ double _copysign(double x, double y)
 The remainder of x / y is exact in IEEE arithmetic, and the game takes it
 in its simulation (object and animation timing, vehicles, periodic
 functions), which runs in lockstep on every machine of a game: it must be
-the same bits as the other ports' C runtimes give. The x87's fprem (nxdk's
-fmod) is exact only while the exponents differ by less than 64. This is
-musl's (src/math/fmod.c and fmodf.c; MIT licence, as port/third_party/
-musl-math): long division on the significands, in integers. */
+the same bits as the other ports' C runtimes give. The x87's fprem gives
+the exact remainder, but only a partial one while the exponents differ by
+64 or more (it then says so with C2, and is run again until C2 is clear):
+so the loop is exact for every pair, the same bits as musl's long division
+in integers (src/math/fmod.c, which this was), which took a 64-bit
+subtraction and shift for every bit between the exponents, 200 to 300
+instructions for the game's times after a few minutes, for every object's
+functions every tick. Checked against musl's over 12 million pairs (edges,
+random bits, the game's sizes) at the FPU's 53 and 64-bit precisions (fprem
+does not round: its precision control does not touch it). */
 
 double fmod(double x, double y)
 {
-	union
-	{
-		double f;
-		uint64_t i;
-	} ux, uy;
-	int ex, ey, sx;
-	uint64_t i, uxi;
+	double r;
 
-	ux.f = x;
-	uy.f = y;
-	ex = (int)(ux.i >> 52 & 0x7ff);
-	ey = (int)(uy.i >> 52 & 0x7ff);
-	sx = (int)(ux.i >> 63);
-	uxi = ux.i;
-	if (uy.i << 1 == 0 || y != y || ex == 0x7ff)
-		return (x * y) / (x * y);
-	if (uxi << 1 <= uy.i << 1)
-	{
-		if (uxi << 1 == uy.i << 1)
-			return 0 * x;
-		return x;
-	}
-	/* normalize x and y */
-	if (!ex)
-	{
-		for (i = uxi << 12; i >> 63 == 0; ex--, i <<= 1)
-			;
-		uxi <<= -ex + 1;
-	}
-	else
-	{
-		uxi &= -1ULL >> 12;
-		uxi |= 1ULL << 52;
-	}
-	if (!ey)
-	{
-		for (i = uy.i << 12; i >> 63 == 0; ey--, i <<= 1)
-			;
-		uy.i <<= -ey + 1;
-	}
-	else
-	{
-		uy.i &= -1ULL >> 12;
-		uy.i |= 1ULL << 52;
-	}
-	/* x mod y */
-	for (; ex > ey; ex--)
-	{
-		i = uxi - uy.i;
-		if (i >> 63 == 0)
-		{
-			if (i == 0)
-				return 0 * x;
-			uxi = i;
-		}
-		uxi <<= 1;
-	}
-	i = uxi - uy.i;
-	if (i >> 63 == 0)
-	{
-		if (i == 0)
-			return 0 * x;
-		uxi = i;
-	}
-	for (; uxi >> 52 == 0; uxi <<= 1, ex--)
-		;
-	/* scale result */
-	if (ex > 0)
-	{
-		uxi -= 1ULL << 52;
-		uxi |= (uint64_t)ex << 52;
-	}
-	else
-		uxi >>= -ex + 1;
-	uxi |= (uint64_t)sx << 63;
-	ux.i = uxi;
-	return ux.f;
+	/* (fprem leaves st(1), y, as it is: popped with the result kept) */
+	__asm__ ("1:\n\tfprem\n\tfnstsw %%ax\n\ttestb $4,%%ah\n\tjnz 1b\n\tfstp %%st(1)"
+		: "=t"(r) : "0"(x), "u"(y) : "ax", "st(1)", "cc");
+	return r;
 }
 
 float fmodf(float x, float y)
 {
-	union
-	{
-		float f;
-		uint32_t i;
-	} ux, uy;
-	int ex, ey;
-	uint32_t sx, i, uxi;
+	float r;
 
-	ux.f = x;
-	uy.f = y;
-	ex = (int)(ux.i >> 23 & 0xff);
-	ey = (int)(uy.i >> 23 & 0xff);
-	sx = ux.i & 0x80000000;
-	uxi = ux.i;
-	if (uy.i << 1 == 0 || y != y || ex == 0xff)
-		return (x * y) / (x * y);
-	if (uxi << 1 <= uy.i << 1)
-	{
-		if (uxi << 1 == uy.i << 1)
-			return 0 * x;
-		return x;
-	}
-	/* normalize x and y */
-	if (!ex)
-	{
-		for (i = uxi << 9; i >> 31 == 0; ex--, i <<= 1)
-			;
-		uxi <<= -ex + 1;
-	}
-	else
-	{
-		uxi &= -1U >> 9;
-		uxi |= 1U << 23;
-	}
-	if (!ey)
-	{
-		for (i = uy.i << 9; i >> 31 == 0; ey--, i <<= 1)
-			;
-		uy.i <<= -ey + 1;
-	}
-	else
-	{
-		uy.i &= -1U >> 9;
-		uy.i |= 1U << 23;
-	}
-	/* x mod y */
-	for (; ex > ey; ex--)
-	{
-		i = uxi - uy.i;
-		if (i >> 31 == 0)
-		{
-			if (i == 0)
-				return 0 * x;
-			uxi = i;
-		}
-		uxi <<= 1;
-	}
-	i = uxi - uy.i;
-	if (i >> 31 == 0)
-	{
-		if (i == 0)
-			return 0 * x;
-		uxi = i;
-	}
-	for (; uxi >> 23 == 0; uxi <<= 1, ex--)
-		;
-	/* scale result up */
-	if (ex > 0)
-	{
-		uxi -= 1U << 23;
-		uxi |= (uint32_t)ex << 23;
-	}
-	else
-		uxi >>= -ex + 1;
-	uxi |= sx;
-	ux.i = uxi;
-	return ux.f;
+	__asm__ ("1:\n\tfprem\n\tfnstsw %%ax\n\ttestb $4,%%ah\n\tjnz 1b\n\tfstp %%st(1)"
+		: "=t"(r) : "0"(x), "u"(y) : "ax", "st(1)", "cc");
+	return r;
 }
 
 long double fmodl(long double x, long double y)

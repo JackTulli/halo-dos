@@ -154,7 +154,7 @@ void dos_tags_import(void *tag_header, void **tag_instances);
 			}
 #endif
 """)
-    insert_after(C, """			global_tag_instances = xbox_pointer(cache_file_globals.tag_header->tag_instances);
+    insert_before(C, """			tags_header_register_vertex_and_index_buffers(cache_file_globals.tag_header);
 """, """#ifdef HALO_DOS
 			/* Firefight's Covenant: a campaign map's tags join these
 			(port/dos/game/dos_import.c) */
@@ -316,7 +316,7 @@ void dos_ce_structure_bsp_mapped(void *block, unsigned long linked_address, unsi
 #endif
 """)
     replace(C, """			tag_cache_base_address = xbox_pointer(CE_TAG_CACHE_BASE);
-			csmemset(tag_cache_base_address, 0xCD, CE_TAG_CACHE_SIZE);""", """#ifdef HALO_DOS
+#ifdef HALO_CONSOLE_CE_SHARED_TAG_CACHE""", """#ifdef HALO_DOS
 			/* (in a block of the DOS and Windows 95 builds' own, of the size
 			its check found its tags, resources and models need: dos_ce.c) */
 			tag_cache_base_address = dos_ce_tag_cache_reserve(cache_file_globals.header.tag_data_size);
@@ -328,8 +328,17 @@ void dos_ce_structure_bsp_mapped(void *block, unsigned long linked_address, unsi
 			}
 #else
 			tag_cache_base_address = xbox_pointer(CE_TAG_CACHE_BASE);
+#endif
+#ifdef HALO_CONSOLE_CE_SHARED_TAG_CACHE""")
+    replace(C, """#endif
 			csmemset(tag_cache_base_address, 0xCD, CE_TAG_CACHE_SIZE);
-#endif""")
+			cache_file_read(NONE,""", """#endif
+#ifndef HALO_DOS
+			/* (the DOS and Windows 95 builds' block is only as big as the map
+			needs: not filled to the whole tag cache's size) */
+			csmemset(tag_cache_base_address, 0xCD, CE_TAG_CACHE_SIZE);
+#endif
+			cache_file_read(NONE,""")
     insert_before(C, """				if (!ce_resources_tags_loaded(global_tag_instances, ce_header->tag_count,""", """#ifdef HALO_DOS
 				/* (no further than its block goes) */
 				end_free = dos_ce_tag_cache_end(end_free);
@@ -360,16 +369,17 @@ void dos_ce_checked(unsigned long end_free, unsigned long next_free, unsigned lo
 		return dos_ce_window_pointer(address, size);
 #endif
 	return image->data + (address - image->base);""")
-    replace(K, """	/* (the bounds first: they pass for nearly every read) */
+    replace(K, """	/* (the bounds first: they pass for nearly every read; then the menus'
+	own tags, added to the map's: menu_tags.c) */
 	if (!size || (address >= CE_IMAGE_TAG_CACHE_BASE && size > 0 &&
 		ce_range_within(address - CE_IMAGE_TAG_CACHE_BASE, (unsigned long)size, CE_IMAGE_TAG_CACHE_SIZE)) ||
-		!cache_file_tags_are_ce())
+		!cache_file_tags_are_ce() || pc_menu_owns(address, size))
 	{
 		return xbox_pointer(address);
 	}""", """#ifdef HALO_DOS
 	/* (the DOS and Windows 95 builds: the bytes where their blocks hold
 	them, or, outside the map's tag cache or the blocks, as below) */
-	if (!size || !cache_file_tags_are_ce())
+	if (!size || !cache_file_tags_are_ce() || pc_menu_owns(address, size))
 		return xbox_pointer(address);
 	if (address >= CE_IMAGE_TAG_CACHE_BASE && size > 0 &&
 		ce_range_within(address - CE_IMAGE_TAG_CACHE_BASE, (unsigned long)size, CE_IMAGE_TAG_CACHE_SIZE))
@@ -380,29 +390,39 @@ void dos_ce_checked(unsigned long end_free, unsigned long next_free, unsigned lo
 			return pointer;
 	}
 #else
-	/* (the bounds first: they pass for nearly every read) */
+	/* (the bounds first: they pass for nearly every read; then the menus'
+	own tags, added to the map's: menu_tags.c) */
 	if (!size || (address >= CE_IMAGE_TAG_CACHE_BASE && size > 0 &&
 		ce_range_within(address - CE_IMAGE_TAG_CACHE_BASE, (unsigned long)size, CE_IMAGE_TAG_CACHE_SIZE)) ||
-		!cache_file_tags_are_ce())
+		!cache_file_tags_are_ce() || pc_menu_owns(address, size))
 	{
 		return xbox_pointer(address);
 	}
 #endif""")
-    replace(K, """	image.data = malloc(CE_IMAGE_TAG_CACHE_SIZE);
-	if (!image.data)
-		return ce_refuse("no memory to check it");
-	memset(image.data, 0xcd, CE_IMAGE_TAG_CACHE_SIZE);""", """#ifdef HALO_DOS
-	/* (the DOS and Windows 95 builds: of its tags and room for what is
-	copied in after them, not of the whole tag cache, 23 MB: dos_ce.c) */
-	image.data = malloc(dos_ce_check_image_size(tag_data_size));
-	if (!image.data)
-		return ce_refuse("no memory to check it");
-	memset(image.data, 0xcd, dos_ce_check_image_size(tag_data_size));
+    replace(K, """		image.data = malloc(CE_IMAGE_TAG_CACHE_SIZE);
+		if (!image.data)
+		{
+			ce_refusal_explain_memory();
+			return ce_refuse("no memory to check it");
+		}
+		memset(image.data, 0xcd, CE_IMAGE_TAG_CACHE_SIZE);""", """#ifdef HALO_DOS
+		/* (the DOS and Windows 95 builds: of its tags and room for what is
+		copied in after them, not of the whole tag cache, 23 MB: dos_ce.c) */
+		image.data = malloc(dos_ce_check_image_size(tag_data_size));
+		if (!image.data)
+		{
+			ce_refusal_explain_memory();
+			return ce_refuse("no memory to check it");
+		}
+		memset(image.data, 0xcd, dos_ce_check_image_size(tag_data_size));
 #else
-	image.data = malloc(CE_IMAGE_TAG_CACHE_SIZE);
-	if (!image.data)
-		return ce_refuse("no memory to check it");
-	memset(image.data, 0xcd, CE_IMAGE_TAG_CACHE_SIZE);
+		image.data = malloc(CE_IMAGE_TAG_CACHE_SIZE);
+		if (!image.data)
+		{
+			ce_refusal_explain_memory();
+			return ce_refuse("no memory to check it");
+		}
+		memset(image.data, 0xcd, CE_IMAGE_TAG_CACHE_SIZE);
 #endif""")
     replace(K, """	if (!ce_resources_check(&image, instances, tag_count, end_free, file_size, &next_free))
 		goto done;""", """#ifdef HALO_DOS
@@ -424,35 +444,48 @@ void dos_ce_checked(unsigned long end_free, unsigned long next_free, unsigned lo
 	dos_ce_checked(end_free, next_free, model_bytes, bsp_bytes);
 #endif
 """)
-    F = "port/linux/game/ce_functions.c"
-    replace(F, """		return NULL;
-	}
-	return xbox_pointer(address);
-}""", """		return NULL;
-	}
-#ifdef HALO_DOS
-	/* (where the DOS and Windows 95 builds' blocks hold them: dos_ce.c) */
+    # (the loaded map's tags, as every conversion reads them: all of a read
+    # in one of the blocks, or none)
+    replace(K, """		ce_range_within(address - CE_IMAGE_TAG_CACHE_BASE, size, ce_loaded_tags.end - CE_IMAGE_TAG_CACHE_BASE))
 	{
-		void *dos_ce_window_pointer(unsigned long address, unsigned long size);
-
+		return xbox_pointer(address);
+	}""", """		ce_range_within(address - CE_IMAGE_TAG_CACHE_BASE, size, ce_loaded_tags.end - CE_IMAGE_TAG_CACHE_BASE))
+	{
+#ifdef HALO_DOS
+		/* (where the DOS and Windows 95 builds' blocks hold them: dos_ce.c) */
 		return dos_ce_window_pointer(address, size);
-	}
 #else
-	return xbox_pointer(address);
+		return xbox_pointer(address);
 #endif
-}""")
+	}""")
+    replace(K, """		if (address >= base && ce_range_within(address - base, size, ce_loaded_tags.placed[index][1]))
+			return xbox_pointer(address);""", """		if (address >= base && ce_range_within(address - base, size, ce_loaded_tags.placed[index][1]))
+#ifdef HALO_DOS
+			return dos_ce_window_pointer(address, size);
+#else
+			return xbox_pointer(address);
+#endif""")
     H = "port/linux/game/ce_hud.c"
-    replace(H, """		if (instance->group_tag == 'hudg' && instance->base_address)
-			ce_hud_button_icons(xbox_pointer(instance->base_address), &image);""", """#ifndef HALO_DOS
+    replace(H, """		hud = ce_loaded_pointer(instance->base_address, HUD_GLOBALS_BUTTON_ICONS_OFFSET + TAG_BLOCK_SIZE);
+		if (hud)
+			ce_hud_button_icons(hud, &image);
+		else
+			ce_contained("HUD globals %08lx are outside its tag cache", instance->base_address);""", """#ifdef HALO_DOS
 		/* (the DOS and Windows 95 builds name the buttons in a HUD message
 		themselves: port/dos/game/dos_prompts.c) */
-		if (instance->group_tag == 'hudg' && instance->base_address)
-			ce_hud_button_icons(xbox_pointer(instance->base_address), &image);
+		(void)hud;
+#else
+		hud = ce_loaded_pointer(instance->base_address, HUD_GLOBALS_BUTTON_ICONS_OFFSET + TAG_BLOCK_SIZE);
+		if (hud)
+			ce_hud_button_icons(hud, &image);
+		else
+			ce_contained("HUD globals %08lx are outside its tag cache", instance->base_address);
 #endif""")
     R = "port/linux/game/ce_resources.c"
     replace(R, """	ce_free_end = end_free;
-	ce_sounds_decode(tag_instances, tag_count);
-	return TRUE;""", """	ce_free_end = end_free;
+	ce_loaded_tags_end(next);
+	ce_sounds_decode(tag_instances, tag_count);""", """	ce_free_end = end_free;
+	ce_loaded_tags_end(next);
 #ifdef HALO_DOS
 	/* (not with the sound off: decoding a map's Ogg Vorbis sounds takes a
 	slow machine a while, and 6 MB of the disk for Blood Gulch: dos_ce.c) */
@@ -464,8 +497,7 @@ void dos_ce_checked(unsigned long end_free, unsigned long next_free, unsigned lo
 	}
 #else
 	ce_sounds_decode(tag_instances, tag_count);
-#endif
-	return TRUE;""")
+#endif""")
     replace(R, """			sprintf(ce_decoded_sounds_path, "%s", path);
 			DeleteFileA(path);""", """			sprintf(ce_decoded_sounds_path, "%s", path);
 #ifndef HALO_DOS
@@ -773,16 +805,9 @@ def game_engine():
 					(signed char)*next_team_index;
 				*next_team_index = (*next_team_index + 1) % 2;
 			}""")
-    replace(G, """			if (test_any_gamepad_button(0) || test_any_gamepad_button(12))
-			{
-				if (global_network_game_server_get())
-				network_game_server_reset_to_pregame(
-					global_network_game_server_get());
-			}
-			else if (test_any_gamepad_button(1) || test_any_gamepad_button(13))
-			{
-				network_game_abort();
-			}""", """#ifdef HALO_DOS
+    insert_before(G, """			if (test_any_gamepad_button(0) || test_any_gamepad_button(12) ||
+				postgame_prompt.pressed_button == 0)
+""", """#ifdef HALO_DOS
 			/* a local game: back to the menu (port/dos/game/dos_menu.c),
 			which shows the results: A or START once the scores are up, or
 			by itself after fifteen seconds; a Custom Edition server's game
@@ -802,16 +827,7 @@ def game_engine():
 			}
 			else
 #endif
-			if (test_any_gamepad_button(0) || test_any_gamepad_button(12))
-			{
-				if (global_network_game_server_get())
-				network_game_server_reset_to_pregame(
-					global_network_game_server_get());
-			}
-			else if (test_any_gamepad_button(1) || test_any_gamepad_button(13))
-			{
-				network_game_abort();
-			}""")
+""")
     at_function_start(G, "game_engine_should_end_game", """#ifdef HALO_DOS
 	{
 		/* (Firefight's players are one team against the Covenant, who
@@ -1149,38 +1165,49 @@ def internet_play():
     one): p2p_initialize starts none, and each of the game's frames runs one
     pass of the thread's loop, waiting for nothing (dos_p2p_poll, from
     port/dos/game/dos_network.c)"""
-    P = "port/linux/src/p2p.c"
-    # (no clipboard in these builds: the link goes to a file, dos_network.c)
-    replace(P, """			platform_log("Internet play: hosting. Invite players with this link (it only works while this "
-				"copy of the game runs; it is on the clipboard): %s",""", """#ifdef HALO_DOS
-			platform_log("Internet play: hosting. Invite players with this link (it only works while this "
-				"copy of the game runs; it is written to INVITE.TXT, the setting net_invite_file): %s",
+    # (delta.c's signed table of OpenCE's network versions, which these
+    # builds cannot fetch: read from DELTA.SIG beside the program, an 8.3
+    # name DOS opens without long file names; the release ships today's,
+    # port/dos/release/DELTA.SIG)
+    replace("port/linux/src/delta.c", """#else
+	snprintf(path, size, "%s/%s", platform_save_root(), DELTA_CACHE_NAME);
+#endif""", """#elif defined(HALO_DOS)
+	snprintf(path, size, "%s\\\\DELTA.SIG", platform_save_root());
 #else
-			platform_log("Internet play: hosting. Invite players with this link (it only works while this "
-				"copy of the game runs; it is on the clipboard): %s",
+	snprintf(path, size, "%s/%s", platform_save_root(), DELTA_CACHE_NAME);
 #endif""")
+    P = "port/linux/src/p2p.c"
     replace(P, """	stun_setup();
-	if (pthread_create(&thread, NULL, p2p_thread, NULL) != 0)""", """	stun_setup();
+	if (thread_stop_create("internet play", p2p_thread, NULL) != 0)""", """	stun_setup();
 #ifdef HALO_DOS
 	/* (no thread: the game's loop runs its passes, dos_p2p_poll) */
-	(void)thread;
 	if (0)
 #else
-	if (pthread_create(&thread, NULL, p2p_thread, NULL) != 0)
+	if (thread_stop_create("internet play", p2p_thread, NULL) != 0)
+#endif""")
+    replace(P, """#ifndef HALO_ANDROID
+	/* (here: it may wait for a program) */
+	p2p_register_url_scheme("halo", "Chupathingy link");
+#endif""", """#if !defined(HALO_ANDROID) && !defined(HALO_DOS)
+	/* (here: it may wait for a program) */
+	p2p_register_url_scheme("halo", "Chupathingy link");
 #endif""")
     replace(P, """		pthread_mutex_unlock(&p2p_lock);
+		waited = p2p_now();
 		if (posix_socket_select(read, &read_count, write, &write_count, NULL, &error_count, 0,
 			wait * 1000, 0) < 0)""", """#ifdef HALO_DOS
 		/* (a pass of the game's frame: nothing waited for) */
 		wait = 0;
 #endif
 		pthread_mutex_unlock(&p2p_lock);
+		waited = p2p_now();
 		if (posix_socket_select(read, &read_count, write, &write_count, NULL, &error_count, 0,
 			wait * 1000, 0) < 0)""")
     replace(P, """#if defined(HALO_ANDROID) && !defined(HALO_SWITCH_CONSOLE)
 		poll_invite_file();
 #endif
 	}
+	pthread_mutex_unlock(&p2p_lock);
 	return NULL;
 }
 """, """#if defined(HALO_ANDROID) && !defined(HALO_SWITCH_CONSOLE)
@@ -1191,16 +1218,10 @@ def internet_play():
 		break;
 #endif
 	}
+	pthread_mutex_unlock(&p2p_lock);
 	return NULL;
 }
 """)
-    replace(P, """} p2p = { 0, 0, -1, 0, -1, .hosting_socket = -1 };""", """#ifdef HALO_DOS
-/* (zeroed: an initialiser put its 2.6 MB in the program's file; its sockets
-are -1 from the start, dos_p2p_state_initialize) */
-} p2p;
-#else
-} p2p = { 0, 0, -1, 0, -1, .hosting_socket = -1 };
-#endif""")
     append(P, """
 #ifdef HALO_DOS
 /* before anything else (the programs' start, port/dos/dos/dos_start.c and
@@ -1245,8 +1266,10 @@ def memory():
         if text.count(old) != 4:
             raise SystemExit(f"{A}: {text.count(old)} Xbox switches")
         text = text.replace(old, "#if !defined(HALO_XBOX_CONSOLE) && !defined(HALO_DOS)\n")
-        text = text.replace("#if !defined(HALO_64BIT) && !defined(HALO_XBOX_CONSOLE)\n",
-                            "#if !defined(HALO_64BIT) && !defined(HALO_XBOX_CONSOLE) && !defined(HALO_DOS)\n")
+        old = "#if !defined(HALO_64BIT) && !defined(HALO_XBOX_CONSOLE) && !defined(HALO_CONSOLE_NO_DEBUG_TOOLS)\n"
+        if text.count(old) != 1:
+            raise SystemExit(f"{A}: {text.count(old)} debug layout switches")
+        text = text.replace(old, old.rstrip("\n") + " && !defined(HALO_DOS)\n")
         write(A, text)
 
 
@@ -1657,8 +1680,10 @@ def d3d_menu():
     screen's window, where the DOS and Windows 95 builds' renderer draws it
     (port/dos/game/dos_render_game.c); render.c is in no other build"""
     replace("source/render/render.c", """		interface_draw_fullscreen_overlays();
+		render_interface_end(FALSE);
 		rasterizer_debug_draw();
 		break;""", """		interface_draw_fullscreen_overlays();
+		render_interface_end(FALSE);
 		rasterizer_debug_draw();
 #ifdef HALO_DOS
 		/* the port's menu or pause over it all (port/dos/game/dos_menu.c) */
@@ -1731,206 +1756,6 @@ int dos_ce_active(void);
 	}""")
 
 
-def opence_versions():
-    """hosts of OpenCE's network versions 35 on (OpenCE itself, ChupathingyCE
-    0.8.1 with its signed table) send the game's settings record 16 bytes
-    longer (20 from 40): the gametype's further options, in front of the
-    record's last 4 bytes (ChupathingyCE 0.8.1's network_rules.c). A client
-    takes it at any of those sizes and makes it the older layout; a game of
-    one of OpenCE's own game types (SWAT, Infection, Gun Game, Hardcore),
-    which this game does not play, is left with the reason"""
-    M = "source/networking/network_client_message_handler.c"
-    replace(M, """#ifdef HALO_PORT_CONSOLE_LIMITS
-#include "networking/network_game_protocol.h"
-#endif
-#include "networking/network_messages.h"
-""", """#if defined(HALO_PORT_CONSOLE_LIMITS) || defined(HALO_DOS)
-#include "networking/network_game_protocol.h"
-#endif
-#include "networking/network_messages.h"
-""")
-    insert_after(M, """static long network_game_client_settings_staging_size = 0;
-""", """#ifdef HALO_DOS
-/* halo-dos: OpenCE's records of network version 35 on, 16 bytes longer (20
-from 40, up to 64 more by a signed table's layouts): taken here, then made
-the older layout in the staging record; the further options (the first 16
-of them: the mode, then Hardcore) kept to see the game type */
-enum
-{
-	DOS_SETTINGS_SIZE = 13120,
-	DOS_SETTINGS_FURTHER = 16 + 64,
-	DOS_OPTION_MODE = 0,
-	DOS_OPTION_HARDCORE = 1,
-	DOS_MODE_SWAT = 1,
-	DOS_MODE_INFECTION = 2,
-	DOS_MODE_GUN_GAME = 3
-};
-typedef char dos_settings_size_assert[sizeof(network_game_client_settings_staging) == DOS_SETTINGS_SIZE ? 1 : -1];
-static byte dos_settings_wire[DOS_SETTINGS_SIZE + DOS_SETTINGS_FURTHER];
-static byte dos_settings_options[16];
-
-/* the record taken (total_size bytes in dos_settings_wire) made the older
-layout in the staging record */
-static void dos_settings_fold(
-	long total_size)
-{
-	long growth = total_size - DOS_SETTINGS_SIZE;
-	byte *staging = (byte *)&network_game_client_settings_staging;
-
-	csmemset(dos_settings_options, 0, sizeof(dos_settings_options));
-	csmemcpy(staging, dos_settings_wire, DOS_SETTINGS_SIZE - 4);
-	csmemcpy(staging + DOS_SETTINGS_SIZE - 4, dos_settings_wire + total_size - 4, 4);
-	if (growth > 0)
-	{
-		csmemcpy(dos_settings_options, dos_settings_wire + DOS_SETTINGS_SIZE - 4,
-			growth < (long)sizeof(dos_settings_options) ? growth : (long)sizeof(dos_settings_options));
-		network_event("the host's record is OpenCE's longer one (%ld bytes): game type option %d, hardcore %d",
-			total_size, (int)dos_settings_options[DOS_OPTION_MODE], (int)dos_settings_options[DOS_OPTION_HARDCORE]);
-	}
-}
-
-/* the OpenCE game type the record plays, which this game does not, or NULL
-(Infection with teams, Gun Game without, SWAT, on the Slayer engine;
-Hardcore on any) */
-static wchar_t const *dos_settings_unsupported(
-	struct network_game const *game)
-{
-	int mode = dos_settings_options[DOS_OPTION_MODE];
-	boolean teams = game->variant.universal_variant.teams != 0;
-
-	if (game->variant.game_engine_index == game_engine_slayer)
-	{
-		if (mode == DOS_MODE_SWAT)
-			return L"This game plays OpenCE's SWAT,\\r\\nwhich this Halo does not play.";
-		if (mode == DOS_MODE_INFECTION && teams)
-			return L"This game plays OpenCE's Infection,\\r\\nwhich this Halo does not play.";
-		if (mode == DOS_MODE_GUN_GAME && !teams)
-			return L"This game plays OpenCE's Gun Game,\\r\\nwhich this Halo does not play.";
-	}
-	if (dos_settings_options[DOS_OPTION_HARDCORE])
-		return L"This game plays OpenCE's Hardcore,\\r\\nwhich this Halo does not play.";
-	return NULL;
-}
-void display_error_text_deferred(wchar_t const *text, short local_player_index);
-#endif
-""")
-    replace(M, """	if (piece->total_size != sizeof(network_game_client_settings_staging) ||
-		piece->length > sizeof(piece->data) ||
-		piece->offset + piece->length > sizeof(network_game_client_settings_staging))
-	{""", """#ifdef HALO_DOS
-	/* halo-dos: the older record, or OpenCE's longer ones (35 on) */
-	if (piece->total_size < DOS_SETTINGS_SIZE || piece->total_size > DOS_SETTINGS_SIZE + DOS_SETTINGS_FURTHER ||
-		piece->length > sizeof(piece->data) ||
-		piece->offset + piece->length > piece->total_size)
-#else
-	if (piece->total_size != sizeof(network_game_client_settings_staging) ||
-		piece->length > sizeof(piece->data) ||
-		piece->offset + piece->length > sizeof(network_game_client_settings_staging))
-#endif
-	{""")
-    replace(M, """			csmemcpy(
-				(byte *)&network_game_client_settings_staging + piece->offset,
-				piece->data,
-				piece->length);
-			network_game_client_settings_staging_size += piece->length;
-			if (network_game_client_settings_staging_size == piece->total_size)
-			{
-				network_game_client_settings_staging_size = 0;
-""", """#ifdef HALO_DOS
-			csmemcpy(dos_settings_wire + piece->offset, piece->data, piece->length);
-#else
-			csmemcpy(
-				(byte *)&network_game_client_settings_staging + piece->offset,
-				piece->data,
-				piece->length);
-#endif
-			network_game_client_settings_staging_size += piece->length;
-			if (network_game_client_settings_staging_size == piece->total_size)
-			{
-				network_game_client_settings_staging_size = 0;
-#ifdef HALO_DOS
-				dos_settings_fold(piece->total_size);
-#endif
-""")
-    replace(M, """				result = network_game_client_game_settings_updated(client, &network_game_client_settings_folded);
-#else""", """#ifdef HALO_DOS
-				if (dos_settings_unsupported(&network_game_client_settings_folded))
-				{
-					network_event("cross-play: leaving the host's game: it plays one of OpenCE's game types");
-					display_error_text_deferred(dos_settings_unsupported(&network_game_client_settings_folded), NONE);
-					network_game_client_rejected_by_game(client, source_address, _rejection_code_game_is_closed);
-					return TRUE;
-				}
-#endif
-				result = network_game_client_game_settings_updated(client, &network_game_client_settings_folded);
-#else""")
-    replace(M, """#else
-				result = network_game_client_game_settings_updated(client, &network_game_client_settings_staging);
-#endif""", """#else
-#ifdef HALO_DOS
-				if (dos_settings_unsupported(&network_game_client_settings_staging))
-				{
-					network_event("cross-play: leaving the host's game: it plays one of OpenCE's game types");
-					display_error_text_deferred(dos_settings_unsupported(&network_game_client_settings_staging), NONE);
-					network_game_client_rejected_by_game(client, source_address, _rejection_code_game_is_closed);
-					return TRUE;
-				}
-#endif
-				result = network_game_client_game_settings_updated(client, &network_game_client_settings_staging);
-#endif""")
-
-
-def listing_origin():
-    """an online listing's flags and kind kept for the join page
-    (port/dos/game/dos_network.c), which tells ChupathingyCE's games from
-    OpenCE's by them: OpenCE's dedicated servers set bit 32 (its version
-    39), ChupathingyCE's 128 too; the stamp's first byte is an OpenCE game
-    type (version 37), which ChupathingyCE's hosts leave 0"""
-    P = "port/linux/src/p2p.h"
-    L = "port/linux/src/p2p_lobby.c"
-    replace(P, """	/* the network version it was listed under (0: not known) */
-	unsigned short version;
-};""", """	/* the network version it was listed under (0: not known) */
-	unsigned short version;
-#ifdef HALO_DOS
-	/* halo-dos: its flags as listed, and the kind its stamp says (an OpenCE
-	game type, version 37; 0 for none) */
-	unsigned char listed_flags, kind;
-#endif
-};""")
-    replace(L, """	char gametype[P2P_LISTING_GAMETYPE_SIZE + 1];
-	/* the signed part's size */
-	int signed_size;
-};""", """	char gametype[P2P_LISTING_GAMETYPE_SIZE + 1];
-#ifdef HALO_DOS
-	/* halo-dos: the stamp's first byte (an OpenCE game type, version 37) */
-	unsigned char kind;
-#endif
-	/* the signed part's size */
-	int signed_size;
-};""")
-    replace(L, """	offset += STAMP_SIZE;
-	if (offset + P2P_SIGNATURE_SIZE != size)
-		return 0;""", """#ifdef HALO_DOS
-	if (offset + STAMP_SIZE > size)
-		return 0;
-	listing->kind = bytes[offset];
-#endif
-	offset += STAMP_SIZE;
-	if (offset + P2P_SIGNATURE_SIZE != size)
-		return 0;""")
-    replace(L, """	shown->version = (unsigned short)listing->version;
-""", """	shown->version = (unsigned short)listing->version;
-#ifdef HALO_DOS
-	/* halo-dos: OpenCE's dedicated servers' bit (32, its version 39) lists
-	one as dedicated too */
-	shown->dedicated = (listing->flags & (_listing_dedicated | 32)) != 0;
-	shown->listed_flags = (unsigned char)listing->flags;
-	shown->kind = listing->kind;
-#endif
-""")
-
-
 def aim_assist():
     """the setting aim_assist (CONTROLS' AIM ASSIST, off by default): off,
     no player's bullets are autoaimed either (the view's magnetism is
@@ -1959,10 +1784,195 @@ def aim_assist():
 """)
 
 
+def halo64_speedups():
+    """the N64 port's (halo-64) speed-ups that leave every result the same:
+    collision features found by a hash, surfaces already listed not walked
+    again, the collision log's counting off (it feeds only a debug display),
+    a marker search whose answer is never read, prisms the vector leaves
+    skipped, per-tick vector checks that only log, and the compiler's own
+    memset and memcpy"""
+    B = "source/physics/collision_bsp.c"
+    replace(B, """static void add_feature(
+	long *count,
+	long *indices,
+	long index)
+{
+	short feature_index;
+
+	for (feature_index = 0; feature_index < *count; feature_index++)
+	{
+		if (indices[feature_index] == index)
+			return;
+	}
+
+	if (*count < 256)
+	{
+		indices[*count] = index;
+		(*count)++;
+	}
+
+	return;
+}""", """#ifdef HALO_DOS
+/* (halo-64's: whether a vertex, an edge or a surface is in a sphere test's
+list already, by a hash of the index and the list, instead of a walk of
+the list each time: entries stamped with the test (stamp << 16 | position
++ 1), each answer checked against the list itself, so the lists come out
+the same, in the same order) */
+enum
+{
+	DOS_FEATURE_HASH_BITS = 10,
+	DOS_FEATURE_HASH_SIZE = 1 << DOS_FEATURE_HASH_BITS
+};
+
+static unsigned long dos_feature_hash[DOS_FEATURE_HASH_SIZE];
+static unsigned long dos_feature_stamp;
+
+static void dos_feature_hash_begin(
+	void)
+{
+	dos_feature_stamp += 0x10000UL;
+	if (!dos_feature_stamp)
+	{
+		memset(dos_feature_hash, 0, sizeof(dos_feature_hash));
+		dos_feature_stamp = 0x10000UL;
+	}
+}
+
+static unsigned long *dos_feature_slot(
+	long const *count,
+	long const *indices,
+	long index)
+{
+	unsigned long slot = (((unsigned long)index ^ ((unsigned long)indices >> 4)) * 2654435761UL) >>
+		(32 - DOS_FEATURE_HASH_BITS);
+
+	for (;;)
+	{
+		unsigned long entry = dos_feature_hash[slot];
+		long position = (long)(entry & 0xFFFFUL) - 1;
+
+		if ((entry & 0xFFFF0000UL) != dos_feature_stamp || (position < *count && indices[position] == index))
+			return &dos_feature_hash[slot];
+		slot = (slot + 1) & (DOS_FEATURE_HASH_SIZE - 1);
+	}
+}
+#endif
+
+static void add_feature(
+	long *count,
+	long *indices,
+	long index)
+{
+#ifdef HALO_DOS
+	unsigned long *slot = dos_feature_slot(count, indices, index);
+
+	if ((*slot & 0xFFFF0000UL) != dos_feature_stamp && *count < 256)
+	{
+		indices[*count] = index;
+		(*count)++;
+		*slot = dos_feature_stamp | (unsigned long)*count;
+	}
+#else
+	short feature_index;
+
+	for (feature_index = 0; feature_index < *count; feature_index++)
+	{
+		if (indices[feature_index] == index)
+			return;
+	}
+
+	if (*count < 256)
+	{
+		indices[*count] = index;
+		(*count)++;
+	}
+#endif
+
+	return;
+}""")
+    insert_before(B, "static void add_feature(\n\tlong *count,\n\tlong *indices,\n\tlong index);\n", """#ifdef HALO_DOS
+static void dos_feature_hash_begin(
+	void);
+#endif
+""")
+    insert_before(B, "\tbsp3d_test_sphere_recursive(&context, 0, 0);\n", """#ifdef HALO_DOS
+	dos_feature_hash_begin();
+#endif
+""")
+    insert_before(B, "\tradius_squared = data->radius * data->radius;\n\tedge_index = surface->first_edge_index;\n", """#ifdef HALO_DOS
+	/* (a surface listed already: its vertices and edges in this sphere were
+	listed with it, and it can add nothing more) */
+	if ((*dos_feature_slot(&data->result->surface_count, data->result->surface_indices, surface_index) &
+		0xFFFF0000UL) == dos_feature_stamp)
+	{
+		return;
+	}
+#endif
+""")
+    replace("source/physics/collision_usage.h", "#ifdef HALO_CONSOLE_NO_DEBUG_TOOLS\n/* port: the collision log counts",
+        "#if defined(HALO_CONSOLE_NO_DEBUG_TOOLS) || defined(HALO_DOS)\n/* port: the collision log counts")
+    replace("source/physics/collision_usage.c",
+        "#ifndef HALO_CONSOLE_NO_DEBUG_TOOLS\n/* (a console's build without its developer tools has none of the counting\n",
+        "#if !defined(HALO_CONSOLE_NO_DEBUG_TOOLS) && !defined(HALO_DOS)\n/* (a console's build without its developer tools has none of the counting\n",
+        count=2)
+    replace("source/items/items.c", """			struct object_marker marker;
+
+			object_get_marker_by_name(
+				item_index,
+				"ground point",
+				&marker,
+				1);
+
+""", """#ifndef HALO_DOS
+			/* (halo-64: its answer is never read) */
+			struct object_marker marker;
+
+			object_get_marker_by_name(
+				item_index,
+				"ground point",
+				&marker,
+				1);
+#endif
+
+""")
+    insert_before("source/physics/collision_features.c",
+        "\t\t\tif (((feature_type == _collision_feature_sphere && collision_sphere_test_vector(", """#ifdef HALO_DOS
+			/* (halo-64's: a prism's plane is the one its test gives, and a
+			vector that does not go into it is not taken whatever the test
+			says: not tested) */
+			if (feature_type == _collision_feature_prism &&
+				!(dot_product3d(vector, &features->prisms[feature_index].plane.n) < -_real_epsilon))
+			{
+				continue;
+			}
+#endif
+""")
+    at_function_start("source/units/units.c", "unit_verify_vectors", """#ifdef HALO_DOS
+	/* (halo-64: it only logs a unit whose vectors are broken) */
+	(void)unit_index;
+	(void)debugstring;
+	return;
+#endif
+""")
+    at_function_start("source/units/bipeds.c", "biped_verify_object_vectors", """#ifdef HALO_DOS
+	/* (halo-64: an assertion only, about ten times a biped a tick) */
+	(void)biped_index;
+	(void)state;
+	return;
+#endif
+""")
+    insert_after("source/cseries/cseries.h", "#define memcpy csmemcpy\n", """#ifdef HALO_DOS
+/* (halo-64's: the compiler's own, written inline for a size it knows, so a
+small copy or clear is a few moves, not two calls and their checks) */
+#define csmemset(buffer, c, size) __builtin_memset((buffer), (int)(c), (size))
+#define csmemcpy(destination, source, size) __builtin_memcpy((destination), (source), (size))
+#endif
+""")
+
+
 def main():
+    halo64_speedups()
     aim_assist()
-    listing_origin()
-    opence_versions()
     ce_client()
     d3d_menu()
     d3d_texture_cache()

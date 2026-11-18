@@ -3,6 +3,12 @@
 #include "cseries.h"
 #include "math/real_math.h"
 #include "audio_probe.h"
+#include "chat.h"
+#include "host_evidence.h"
+#include "loading_screen.h"
+#include "stats_log.h"
+#include "structure_culling.h"
+#include "stubbs_mode.h"
 #include "bink/bink_playback.h"
 #include "bitmaps/tiff_file.h"
 #include "cache/cache_files.h"
@@ -21,6 +27,7 @@
 #include "rasterizer/rasterizer_cinematics.h"
 #include "rasterizer/rasterizer_environment.h"
 #include "rasterizer/rasterizer_lights.h"
+#include "rasterizer/rasterizer_transparent_geometry.h"
 #include "rasterizer/rasterizer_widgets.h"
 #include "rasterizer/xbox/rasterizer_xbox_hardware_bitmaps.h"
 #include "render/render.h"
@@ -47,6 +54,7 @@ boolean debug_player; /* stand-in: debug_player */
 boolean debug_portals; /* stand-in: debug_portals */
 boolean debug_structure; /* stand-in: debug_structure */
 boolean debug_texture_cache; /* stand-in: debug_texture_cache */
+struct rasterizer_lights rasterizer_lights; /* stand-in: rasterizer_lights */
 boolean render_contrails_enabled; /* stand-in: render_contrails_enabled */
 boolean render_particle_systems_enabled; /* stand-in: render_particle_systems_enabled */
 boolean render_particles_enabled; /* stand-in: render_particles_enabled */
@@ -69,12 +77,14 @@ void build_sprite_rotational(struct build_sprite_data *data, unsigned long flags
 void build_sprites_begin(struct build_sprite_data *data, short maximum_sprite_count, long bitmap_group_index, struct shader_effect_definition const *shader, unsigned long flags) {  } /* stand-in: build_sprites_begin */
 void build_sprites_end(struct build_sprite_data *data) {  } /* stand-in: build_sprites_end */
 void cache_files_display_map_error(char const *map_name) {  } /* stand-in: cache_files_display_map_error */
+int chat_host_notice_to_machine(short machine, char const *text) { int result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: chat_host_notice_to_machine */
 long connected_geometry_add_triangle(struct connected_geometry *geometry, real_point3d const *point0, real_point3d const *point1, real_point3d const *point2, boolean report_duplicates) { long result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: connected_geometry_add_triangle */
 void connected_geometry_delete(struct connected_geometry *geometry) {  } /* stand-in: connected_geometry_delete */
 long connected_geometry_group_coplanar(struct connected_geometry *geometry) { long result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: connected_geometry_group_coplanar */
 void connected_geometry_new(struct connected_geometry *geometry) {  } /* stand-in: connected_geometry_new */
 volatile unsigned int * d3d_find_flipcount(void) { volatile unsigned int * result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: d3d_find_flipcount */
 void debug_pvs(boolean on) {  } /* stand-in: debug_pvs */
+int delta_peer_game_host_agreed_mcc_maps(void) { int result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: delta_peer_game_host_agreed_mcc_maps */
 void display_error(short error_code, short local_player_index, boolean modal, boolean pause_game_time) {  } /* stand-in: display_error */
 void display_error_abort_to_dashboard_deferred(short error_code, boolean optional) {  } /* stand-in: display_error_abort_to_dashboard_deferred */
 void display_error_damaged_media(void) {  } /* stand-in: display_error_damaged_media */
@@ -84,6 +94,7 @@ void display_error_when_main_menu_loaded(short error_code) {  } /* stand-in: dis
 void display_errors_deferred_until_cinematic_stop(void) {  } /* stand-in: display_errors_deferred_until_cinematic_stop */
 void display_scenario_help(short string_index) {  } /* stand-in: display_scenario_help */
 void draw_bitmap_in_rect(struct bitmap_data *bitmap, rectangle2d *rect, rectangle2d *bitmap_rect, rectangle2d *clip_rect, pixel32 argb, struct rasterizer_dynamic_screen_geometry_parameters *multitexture_params, boolean no_plasma) {  } /* stand-in: draw_bitmap_in_rect */
+void draw_string_and_hack_in_icons_for_menus(boolean menus) {  } /* stand-in: draw_string_and_hack_in_icons_for_menus */
 void editor_dispose(void) {  } /* stand-in: editor_dispose */
 void editor_dispose_from_old_map(void) {  } /* stand-in: editor_dispose_from_old_map */
 void editor_initialize(void) {  } /* stand-in: editor_initialize */
@@ -92,10 +103,15 @@ boolean editor_should_exit(void) { boolean result; memset(&result, 0, sizeof(res
 void editor_update(void) {  } /* stand-in: editor_update */
 void game_end_credits_start(void) {  } /* stand-in: game_end_credits_start */
 boolean game_in_editor(void) { boolean result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: game_in_editor */
+void host_evidence_note(long machine_index, enum host_evidence_kind kind) {  } /* stand-in: host_evidence_note */
+void host_evidence_reset(void) {  } /* stand-in: host_evidence_reset */
+void host_evidence_reset_machine(long machine_index) {  } /* stand-in: host_evidence_reset_machine */
+boolean loading_screen_skip_pressed(void) { boolean result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: loading_screen_skip_pressed */
 void main_menu_active(boolean active) {  } /* stand-in: main_menu_active */
 void main_screen_shell_begin_fade(unsigned long fade_duration_milliseconds) {  } /* stand-in: main_screen_shell_begin_fade */
 void network_game_reset_to_pregame_ui(void) {  } /* stand-in: network_game_reset_to_pregame_ui */
 void network_test_update(boolean main_menu_loaded, real seconds) {  } /* stand-in: network_test_update */
+char const * pc_menus_screen(char const *name) { char const * result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: pc_menus_screen */
 void platform_scoreboard_scroll(int open, long *notches, long *pages) {  } /* stand-in: platform_scoreboard_scroll */
 void platform_show_message(char const *title, char const *message) {  } /* stand-in: platform_show_message */
 void process_ui_widgets(void) {  } /* stand-in: process_ui_widgets */
@@ -167,7 +183,9 @@ void rasterizer_screen_effects_initialize_for_new_map(void) {  } /* stand-in: ra
 real rasterizer_script_screen_effect_get_value(short effect_index) { real result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: rasterizer_script_screen_effect_get_value */
 void rasterizer_script_screen_effect_set_value(word effect_index, real value) {  } /* stand-in: rasterizer_script_screen_effect_set_value */
 void rasterizer_set_near_clip_distance(real near_clip_distance) {  } /* stand-in: rasterizer_set_near_clip_distance */
+boolean rasterizer_text_ink_span(rectangle2d const *bounds, wchar_t const *string, real *x0, real *x1) { boolean result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: rasterizer_text_ink_span */
 void rasterizer_transparent_geometry_draw(boolean water) {  } /* stand-in: rasterizer_transparent_geometry_draw */
+boolean rasterizer_transparent_geometry_is_enclosure(struct shader const *glass, struct vertex_buffer const *outer, struct triangle_buffer const *triangles, struct shader const *energy, struct vertex_buffer const *inner) { boolean result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: rasterizer_transparent_geometry_is_enclosure */
 void rasterizer_widget_begin(short type, word flags) {  } /* stand-in: rasterizer_widget_begin */
 void rasterizer_widget_draw_sprite3d(real_point3d const *point, real radius, real_vector2d const *scale, real rotation, unsigned long color) {  } /* stand-in: rasterizer_widget_draw_sprite3d */
 void rasterizer_widget_end(void) {  } /* stand-in: rasterizer_widget_end */
@@ -195,10 +213,16 @@ void render_debug_triangle(boolean immediate, real_point3d const *point0, real_p
 void render_debug_vector(boolean immediate, real_point3d const *point, real_vector3d const *vector, real size, real_argb_color const *color) {  } /* stand-in: render_debug_vector */
 void render_debug_vectors(boolean immediate, real_point3d const *point, real_vector3d const *forward, real_vector3d const *up, real size) {  } /* stand-in: render_debug_vectors */
 void render_effects(boolean enable) {  } /* stand-in: render_effects */
+void render_interface_begin(boolean centered) {  } /* stand-in: render_interface_begin */
+void render_interface_end(boolean centered) {  } /* stand-in: render_interface_end */
 void render_ui_widgets_postgame(short local_player_index, rectangle2d *window_bounds) {  } /* stand-in: render_ui_widgets_postgame */
 struct rendered_cluster * rendered_cluster_get(short rendered_cluster_index) { struct rendered_cluster * result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: rendered_cluster_get */
 void reset_last_player1_profile_index(void) {  } /* stand-in: reset_last_player1_profile_index */
 void stack_walk_with_context(FILE *error_stream, short levels_to_ignore, CONTEXT *context_pointer) {  } /* stand-in: stack_walk_with_context */
+void stats_log_tick(void) {  } /* stand-in: stats_log_tick */
+void structure_culling_dispose(void) {  } /* stand-in: structure_culling_dispose */
+void structure_culling_load_settings(void) {  } /* stand-in: structure_culling_load_settings */
+void structure_culling_structure_bsp_loaded(void) {  } /* stand-in: structure_culling_structure_bsp_loaded */
 void structure_detail_objects_dispose(void) {  } /* stand-in: structure_detail_objects_dispose */
 void structure_detail_objects_dispose_from_old_map(void) {  } /* stand-in: structure_detail_objects_dispose_from_old_map */
 void structure_detail_objects_flush(void) {  } /* stand-in: structure_detail_objects_flush */
@@ -208,6 +232,7 @@ void structure_render_diffuse_light(long rasterizer_light_index, real_point3d co
 void structure_render_set_fog_offset(real_vector3d *vector_offset) {  } /* stand-in: structure_render_set_fog_offset */
 void structure_render_specular_light(long rasterizer_light_index, real_point3d const *bounding_sphere_center, real bounding_sphere_radius, short cluster_count, short *cluster_indices) {  } /* stand-in: structure_render_specular_light */
 short structure_visibility_find_objects(long *result_indices, short maximum_count, long (*cluster_get_first)(long *iterator, short cluster_index), long (*cluster_get_next)(long *iterator), void (*get_bounding_sphere)(long object_index, real_point3d *center, real *radius), boolean (*unmarked)(long object_index), boolean (*mark)(long object_index)) { short result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: structure_visibility_find_objects */
+boolean stubbs_mode_active(void) { boolean result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: stubbs_mode_active */
 void texture_cache_flush(void) {  } /* stand-in: texture_cache_flush */
 char const * tiff_export(struct file_reference *file, struct bitmap_data *bitmap) { char const * result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: tiff_export */
 void ui_set_next_level(short level) {  } /* stand-in: ui_set_next_level */
@@ -229,4 +254,4 @@ void virtual_keyboard_dispose(void) {  } /* stand-in: virtual_keyboard_dispose *
 boolean virtual_keyboard_launch(wchar_t *text_buffer, word buffer_size, short caption_index) { boolean result; memset(&result, 0, sizeof(result)); return result; } /* stand-in: virtual_keyboard_launch */
 void xbox_demos_launch(void) {  } /* stand-in: xbox_demos_launch */
 
-/* no declaration in source/ (the platform layer's to implement): _WSAGetLastError@0 _WSAStartup@8 ___WSAFDIsSet@8 __imp__AdjustWindowRect@12 __imp__ChangeDisplaySettingsA@8 __imp__ChoosePixelFormat@8 __imp__ClientToScreen@8 __imp__ClipCursor@4 __imp__CloseHandle@4 __imp__CreateFileA@28 __imp__CreateThread@24 __imp__CreateWindowExA@48 __imp__DefWindowProcA@16 __imp__DescribePixelFormat@16 __imp__DestroyWindow@4 __imp__DispatchMessageA@4 __imp__DuplicateHandle@28 __imp__EnumDisplaySettingsA@12 __imp__ExitProcess@4 __imp__FillRect@12 __imp__FreeLibrary@4 __imp__GetClientRect@8 __imp__GetCommandLineA@0 __imp__GetCurrentProcess@0 __imp__GetCurrentProcessId@0 __imp__GetCurrentThread@0 __imp__GetCursorPos@4 __imp__GetDC@4 __imp__GetDeviceCaps@8 __imp__GetModuleFileNameA@12 __imp__GetModuleHandleA@4 __imp__GetProcAddress@8 __imp__GetStdHandle@4 __imp__GetStockObject@4 __imp__GetSystemMetrics@4 __imp__GetSystemTimeAsFileTime@4 __imp__GetThreadContext@8 __imp__GetTickCount@0 __imp__GetVersionExA@4 __imp__GetWindowRect@8 __imp__GlobalMemoryStatus@4 __imp__IsBadReadPtr@8 __imp__IsIconic@4 __imp__LoadCursorA@8 __imp__LoadLibraryA@4 __imp__MessageBoxA@16 __imp__OutputDebugStringA@4 __imp__PeekMessageA@20 __imp__QueryPerformanceCounter@4 __imp__QueryPerformanceFrequency@4 __imp__RegisterClassA@4 __imp__ReleaseDC@8 __imp__ResumeThread@4 __imp__SetCursor@4 __imp__SetCursorPos@8 __imp__SetForegroundWindow@4 __imp__SetPixelFormat@12 __imp__SetRect@20 __imp__SetThreadPriority@8 __imp__SetUnhandledExceptionFilter@4 __imp__SetWindowLongA@12 __imp__SetWindowPos@28 __imp__ShowCursor@4 __imp__ShowWindow@8 __imp__Sleep@4 __imp__StretchDIBits@52 __imp__SuspendThread@4 __imp__SwapBuffers@4 __imp__TranslateMessage@4 __imp__UpdateWindow@4 __imp__VirtualAlloc@16 __imp__WriteFile@20 __imp__joyGetDevCapsA@12 __imp__joyGetNumDevs@0 __imp__joyGetPosEx@8 __imp__timeBeginPeriod@4 __imp__timeGetTime@0 __imp__waveOutClose@4 __imp__waveOutGetNumDevs@0 __imp__waveOutOpen@24 __imp__waveOutPrepareHeader@12 __imp__waveOutReset@4 __imp__waveOutUnprepareHeader@12 __imp__waveOutWrite@12 _accept@12 _bind@12 _closesocket@4 _connect@12 _gethostbyname@4 _gethostname@8 _getpeername@12 _getsockname@12 _getsockopt@20 _htonl@4 _htons@4 _inet_addr@4 _ioctlsocket@12 _listen@8 _ntohl@4 _recv@16 _recvfrom@24 _select@20 _send@16 _sendto@24 _setsockopt@20 _shutdown@8 _socket@12 */
+/* no declaration in source/ (the platform layer's to implement): _WSAGetLastError@0 _WSAStartup@8 ___WSAFDIsSet@8 __imp__AdjustWindowRect@12 __imp__ChangeDisplaySettingsA@8 __imp__ChoosePixelFormat@8 __imp__ClientToScreen@8 __imp__ClipCursor@4 __imp__CloseHandle@4 __imp__CreateFileA@28 __imp__CreateProcessA@40 __imp__CreateThread@24 __imp__CreateWindowExA@48 __imp__DefWindowProcA@16 __imp__DescribePixelFormat@16 __imp__DestroyWindow@4 __imp__DispatchMessageA@4 __imp__DuplicateHandle@28 __imp__EnumDisplaySettingsA@12 __imp__ExitProcess@4 __imp__FillRect@12 __imp__FreeLibrary@4 __imp__GetClientRect@8 __imp__GetCommandLineA@0 __imp__GetCurrentProcess@0 __imp__GetCurrentProcessId@0 __imp__GetCurrentThread@0 __imp__GetCursorPos@4 __imp__GetDC@4 __imp__GetDeviceCaps@8 __imp__GetModuleFileNameA@12 __imp__GetModuleHandleA@4 __imp__GetProcAddress@8 __imp__GetStdHandle@4 __imp__GetStockObject@4 __imp__GetSystemMetrics@4 __imp__GetSystemTimeAsFileTime@4 __imp__GetThreadContext@8 __imp__GetTickCount@0 __imp__GetVersionExA@4 __imp__GetWindowRect@8 __imp__GlobalMemoryStatus@4 __imp__IsBadReadPtr@8 __imp__IsIconic@4 __imp__LoadCursorA@8 __imp__LoadLibraryA@4 __imp__MessageBoxA@16 __imp__OutputDebugStringA@4 __imp__PeekMessageA@20 __imp__QueryPerformanceCounter@4 __imp__QueryPerformanceFrequency@4 __imp__RegisterClassA@4 __imp__ReleaseDC@8 __imp__ResumeThread@4 __imp__SetCursor@4 __imp__SetCursorPos@8 __imp__SetForegroundWindow@4 __imp__SetPixelFormat@12 __imp__SetRect@20 __imp__SetThreadPriority@8 __imp__SetUnhandledExceptionFilter@4 __imp__SetWindowLongA@12 __imp__SetWindowPos@28 __imp__ShowCursor@4 __imp__ShowWindow@8 __imp__Sleep@4 __imp__StretchDIBits@52 __imp__SuspendThread@4 __imp__SwapBuffers@4 __imp__TranslateMessage@4 __imp__UpdateWindow@4 __imp__VirtualAlloc@16 __imp__WriteFile@20 __imp__joyGetDevCapsA@12 __imp__joyGetNumDevs@0 __imp__joyGetPosEx@8 __imp__timeBeginPeriod@4 __imp__timeGetTime@0 __imp__waveOutClose@4 __imp__waveOutGetNumDevs@0 __imp__waveOutOpen@24 __imp__waveOutPrepareHeader@12 __imp__waveOutReset@4 __imp__waveOutUnprepareHeader@12 __imp__waveOutWrite@12 _accept@12 _bind@12 _closesocket@4 _connect@12 _gethostbyname@4 _gethostname@8 _getpeername@12 _getsockname@12 _getsockopt@20 _htonl@4 _htons@4 _inet_addr@4 _ioctlsocket@12 _listen@8 _ntohl@4 _recv@16 _recvfrom@24 _select@20 _send@16 _sendto@24 _setsockopt@20 _shutdown@8 _socket@12 */

@@ -7,9 +7,10 @@ platform, answered by the DOS and Windows 95 builds:
 - this user's secret (the keys its invites are signed with): HALOKEY.BIN
   beside the program, 32 random bytes made the first time;
 - the command line's arguments (an invite link passed to the program);
-- the settings' folder and a whole file read (the signed tables it keeps);
+- the settings' folder and a whole file read (the signed tables it keeps),
+  and the save folder (delta.c's cached table): the program's;
 - none of the desktop's extras: no link handler is registered, there is no
-  hardware id, no Discord and no table switching a capability off.
+  hardware id and no Discord.
 */
 
 #include "platform.h"
@@ -29,6 +30,11 @@ extern char **system_argv;
 void config_folder(char *path, size_t size)
 {
 	snprintf(path, size, "%s\\", system_program_directory());
+}
+
+const char *platform_save_root(void)
+{
+	return system_program_directory();
 }
 
 char *config_file_read(const char *path, size_t *size)
@@ -181,9 +187,26 @@ void p2p_discord_user(char *id, int id_size, char *name, int name_size)
 		name[0] = 0;
 }
 
-int delta_capability_disabled(int capability)
+/* (no threads in these builds: one that would be started is refused, and
+the callers, which run their work in passes instead, never stop) */
+int thread_stop_create(const char *name, void *(*main)(void *), void *argument)
 {
-	(void)capability;
+	(void)name;
+	(void)main;
+	(void)argument;
+	return -1;
+}
+
+int thread_stop_requested(void)
+{
+	return 0;
+}
+
+/* (no menus' tags: port/dos/game/dos_chupathingy.c) */
+unsigned char pc_menu_owns(unsigned long address, long size)
+{
+	(void)address;
+	(void)size;
 	return 0;
 }
 

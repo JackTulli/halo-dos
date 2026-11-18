@@ -396,18 +396,19 @@ static int ce_map_here(const char *name)
 	return ce_maps[i].here;
 }
 
-/* whose an online game is, by what its listing says: a dedicated server's
-flags (ChupathingyCE's set 128, OpenCE's 32 alone), an OpenCE game type in
-its stamp (ChupathingyCE's hosts leave it 0), else its network version:
-ChupathingyCE's hosts announce 32 (their own), or 23, 25 or 38 (its signed
-table's), OpenCE's testing builds 33 to 37; from 39 both announce the same
-number and nothing in the listing tells them apart */
+/* whose an online game is, by what its listing says (ChupathingyCE's own
+reading of it, p2p_lobby.c): an OpenCE dedicated server's flags or an
+OpenCE game type in its stamp (ChupathingyCE's hosts leave it 0), a
+ChupathingyCE dedicated server, else its network version: ChupathingyCE's
+hosts announce 32 (their own), or 23, 25 or 38 (its signed table's),
+OpenCE's testing builds 33 to 37; from 39 both announce the same numbers
+and nothing in the listing tells them apart */
 static int listing_kind(const struct p2p_listing *listing)
 {
-	if (listing->listed_flags & 128)
-		return DOS_GAME_CHUPATHINGY;
-	if ((listing->listed_flags & 32) || listing->kind)
+	if (listing->opence_server || listing->kind)
 		return DOS_GAME_OPENCE;
+	if (listing->dedicated)
+		return DOS_GAME_CHUPATHINGY;
 	if (listing->version <= 32 || listing->version == 38)
 		return DOS_GAME_CHUPATHINGY;
 	if (listing->version <= 37)

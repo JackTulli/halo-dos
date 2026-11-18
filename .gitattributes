@@ -1,0 +1,2 @@
+# (delta.c checks this signed table's signature over its exact bytes)
+port/dos/release/DELTA.SIG -text
