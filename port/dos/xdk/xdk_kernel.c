@@ -701,10 +701,14 @@ not only from its frames' drawing (dos_network_update): the host waiting
 for its players to load draws nothing, and the game's own waits for a
 stream to drain need the pass that drains it */
 void dos_p2p_poll(void);
+/* (a Custom Edition server kept hearing from us while a map loads:
+dos_ce_client.c) */
+void dos_ce_heartbeat(void);
 
 VOID WINAPI Sleep(DWORD milliseconds)
 {
 	dos_p2p_poll();
+	dos_ce_heartbeat();
 	dsound_pump();
 	system_sleep(milliseconds);
 }

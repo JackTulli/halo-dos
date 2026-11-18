@@ -1970,7 +1970,136 @@ small copy or clear is a few moves, not two calls and their checks) */
 """)
 
 
+def ce_client_game_types():
+    """the Custom Edition client (port/dos/game/dos_ce_client.c): a CE
+    server's HUD messages shown as the engine's own, and its game types'
+    scores put straight into each game type's state (their states are each
+    file's own; going through game_engine_read_network_state played the
+    sounds a client derives from them, which a CE server sends itself, and
+    its offsets were Slayer's: Capture the Flag's scores never took).
+    Oddball's and King of the Hill's times come in seconds (ChupathingyCE's
+    CE server: a real CE client showed 52 seconds of ticks as 25:47)"""
+    append("source/game/game_engine.c", """
+#ifdef HALO_DOS
+/* (the Custom Edition client: a server's HUD message, numbered as ours) */
+void dos_ce_multiplayer_message(
+	long player_index,
+	long message,
+	long message_data)
+{
+	if (game_engine && player_try_and_get(player_index))
+		multiplayer_message(player_index, message, message_data);
+}
+#endif
+""")
+    append("source/game/game_engine_ctf.c", """
+#ifdef HALO_DOS
+/* (the Custom Edition client: a server's ctf_update) */
+void dos_ce_ctf_update(
+	long red_score,
+	long blue_score,
+	long flag_swap_timer)
+{
+	ctf_globals.scores[0] = red_score;
+	ctf_globals.scores[1] = blue_score;
+	if (flag_swap_timer >= 0)
+		ctf_globals.flag_swap_timer = flag_swap_timer;
+}
+#endif
+""")
+    append("source/game/game_engine_slayer.c", """
+#ifdef HALO_DOS
+/* (the Custom Edition client: a server's slayer_update, teams by team,
+players by absolute index) */
+void dos_ce_slayer_update(
+	long const *team_scores,
+	long const *individual_scores,
+	long count)
+{
+	long index;
+
+	for (index = 0; index < count && index < (long)NUMBEROF(slayer_globals.team_score); index++)
+	{
+		slayer_globals.team_score[index] = team_scores[index];
+		slayer_globals.individual_score[index] = individual_scores[index];
+	}
+}
+#endif
+""")
+    append("source/game/game_engine_oddball.c", """
+#ifdef HALO_DOS
+/* (the Custom Edition client: a server's oddball_update, its times in
+seconds; the balls' carriers, by ball) */
+void dos_ce_oddball_update(
+	long const *team_seconds,
+	long const *individual_seconds,
+	long count,
+	long const *carriers,
+	long carrier_count)
+{
+	long index;
+
+	for (index = 0; index < count && index < (long)NUMBEROF(oddball_globals.team_score); index++)
+	{
+		oddball_globals.team_score[index] = team_seconds[index] * TICKS_PER_SECOND;
+		oddball_globals.individual_score[index] = individual_seconds[index] * TICKS_PER_SECOND;
+	}
+	for (index = 0; index < carrier_count && index < MAXIMUM_ODDBALLS; index++)
+		oddball_globals.current_ball_owner[index] = carriers[index];
+}
+#endif
+""")
+    append("source/game/game_engine_king.c", """
+#ifdef HALO_DOS
+/* (the Custom Edition client: a server's king_update, its times in
+seconds; a new hill found as a Delta client's is, its sound the server's
+to send) */
+void dos_ce_king_update(
+	long const *team_seconds,
+	long count,
+	long hill_id)
+{
+	long index;
+
+	for (index = 0; index < count && index < (long)NUMBEROF(king_globals.score); index++)
+		king_globals.score[index] = team_seconds[index] * TICKS_PER_SECOND;
+	if (hill_id != king_globals.hill_id)
+	{
+		king_globals.hill_id = hill_id;
+		find_hill();
+	}
+}
+#endif
+""")
+    append("source/game/game_engine_race.c", """
+#ifdef HALO_DOS
+/* (the Custom Edition client: a server's race_update, teams' laps by team,
+the flags by absolute player index) */
+void dos_ce_race_update(
+	long const *team_laps,
+	long const *first_flags,
+	long const *lap_flags,
+	long count,
+	unsigned long lap_completed_value,
+	long rally_flag)
+{
+	long index;
+
+	for (index = 0; index < count && index < (long)NUMBEROF(race_globals.team_laps); index++)
+	{
+		race_globals.team_laps[index] = team_laps[index];
+		race_globals.first_flag[index] = first_flags[index];
+		race_globals.lap_bit_vector[index] = lap_flags[index];
+	}
+	race_globals.lap_completed_value = lap_completed_value;
+	race_globals.rally_flag = rally_flag;
+}
+#endif
+""")
+
+
 def main():
+    ce_client_game_types()
     halo64_speedups()
     aim_assist()
     ce_client()

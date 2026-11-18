@@ -24,8 +24,8 @@ enum
 struct retail_browse_server
 {
 	int kind;
-	char name[64], map[32], game_type[32], version[24];
-	int players, maximum_players, password, ping_ms;
+	char name[64], map[32], game_type[32], version[24], bridge[16];
+	int players, maximum_players, password, ping_ms, playing;
 	/* where it is (network order; its port) */
 	uint32_t address;
 	uint16_t port;

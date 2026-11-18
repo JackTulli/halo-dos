@@ -638,8 +638,15 @@ static int find_games(struct found *found, int maximum)
 		for (int i = 0; i < retail_count; i++)
 		{
 			struct found *line = &found[count];
+			/* (Custom Edition 1.10's version, the one this client speaks; a
+			server that gave none is taken to be it) */
+			int ce_version = !retail[i].version[0] || !strcmp(retail[i].version, "01.00.10.0621");
 
 			if (retail[i].kind == _retail_pc && !pc)
+				continue;
+			/* (a ChupathingyCE dedicated server that takes no Custom Edition
+			players: its own listing shows it already, joinable that way) */
+			if (retail[i].kind != _retail_pc && retail[i].bridge[0] && !ce_version)
 				continue;
 			memset(line, 0, sizeof(*line));
 			snprintf(line->game.name, sizeof(line->game.name), "%s", retail[i].name[0] ? retail[i].name : "(NO NAME)");
@@ -650,8 +657,8 @@ static int find_games(struct found *found, int maximum)
 			upper(line->game.game_type);
 			line->game.players = retail[i].players;
 			line->game.maximum_players = retail[i].maximum_players;
-			line->game.in_progress = FALSE;
-			line->game.compatible = TRUE;
+			line->game.in_progress = retail[i].playing;
+			line->game.compatible = retail[i].kind == _retail_pc || ce_version;
 			line->game.internet = TRUE;
 			line->game.kind = retail[i].kind == _retail_pc ? DOS_GAME_RETAIL_PC : DOS_GAME_CUSTOM_EDITION;
 			line->game.ping_ms = retail[i].ping_ms;
@@ -661,8 +668,10 @@ static int find_games(struct found *found, int maximum)
 			one the join downloads first: dos_map_download.c, the setting
 			map_download) */
 			line->game.has_map = retail[i].kind != _retail_pc && ce_map_here(retail[i].map);
-			line->game.joinable = retail[i].kind != _retail_pc &&
-				(line->game.has_map || dos_setting_integer("map_download", 1));
+			/* (another version refuses the join; a ChupathingyCE server's Xbox
+			maps, xbox_<map>, are in no map repository) */
+			line->game.joinable = retail[i].kind != _retail_pc && ce_version && (line->game.has_map ||
+				(dos_setting_integer("map_download", 1) && _strnicmp(retail[i].map, "xbox_", 5)));
 			snprintf(line->game.key, sizeof(line->game.key), "C%08lX:%u", (unsigned long)retail[i].address,
 				(unsigned)retail[i].port);
 			line->listed_index = -1;

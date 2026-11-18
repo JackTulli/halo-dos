@@ -2,9 +2,12 @@
 GS_QUERY.C
 
 Asking retail Halo PC / Custom Edition servers what they are playing
-(gs_query.h). The question: FE FD 00, a 4-byte id, then FF 00 00 (every
-server key, no players, no teams). The answer: 00, the id, then key and
-value strings (each ending in a 0) until an empty key.
+(gs_query.h). The question: FE FD 00, a 4-byte id, then FF FF FF (every
+server key, every player's and team's: Gearbox's servers answer FF 00 00
+too, but ChupathingyCE's dedicated servers, which list themselves on the
+same master, answer only the whole question). The answer: 00, the id, then
+key and value strings (each ending in a 0) until an empty key; the players'
+and teams' sections after it are not read.
 */
 
 #include "gs_query.h"
@@ -89,6 +92,12 @@ static void take_answer(struct gs_query_server *server, const unsigned char *dat
 			server->password = atoi(value) != 0;
 		else if (!strcmp(key, "dedicated"))
 			server->dedicated = atoi(value) != 0;
+		/* (ChupathingyCE's dedicated servers: bridge=chupathingy, and whether
+		a game is on) */
+		else if (!strcmp(key, "bridge"))
+			copy_value(server->bridge, sizeof(server->bridge), value);
+		else if (!strcmp(key, "gamemode"))
+			server->playing = !strcmp(value, "openplaying");
 	}
 	server->ping_ms = (int)(now_ms - server->sent_ms);
 	server->state = _gs_query_answered;
@@ -130,7 +139,7 @@ int gs_query_poll(struct gs_query *query, unsigned long now_ms)
 			server->state = server->tries < QUERY_TRIES ? _gs_query_waiting : _gs_query_silent;
 		if (server->state == _gs_query_waiting && sent < QUERIES_PER_POLL)
 		{
-			unsigned char question[10] = { 0xFE, 0xFD, 0x00, 0, 0, 0, 0, 0xFF, 0x00, 0x00 };
+			unsigned char question[10] = { 0xFE, 0xFD, 0x00, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF };
 
 			memcpy(question + 3, &query->id, 4);
 			retail_socket_send_to(query->socket, question, sizeof(question), server->address, server->port);

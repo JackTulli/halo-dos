@@ -52,6 +52,7 @@ float dos_setting_real(const char *name, float default_value);
 void dos_log_scripts(void);
 void dos_menu_frame(void);
 void dos_p2p_poll(void);
+void dos_ce_heartbeat(void);
 void dos_models_set_change_color(unsigned long color);
 void dos_hud_frame_begin(void);
 void dos_hud_dispose_from_old_map(void);
@@ -1412,6 +1413,7 @@ static void loading_show(int forced)
 	/* (internet play's peers heard from during a long load, and the sound
 	kept playing) */
 	dos_p2p_poll();
+	dos_ce_heartbeat();
 	{
 		extern void dsound_pump(void);
 

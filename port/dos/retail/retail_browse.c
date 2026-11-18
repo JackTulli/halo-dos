@@ -213,6 +213,8 @@ int retail_browse_servers(struct retail_browse_server *servers, int maximum)
 		snprintf(server->game_type, sizeof(server->game_type), "%s",
 			sorted[i].variant[0] ? sorted[i].variant : sorted[i].game_type);
 		snprintf(server->version, sizeof(server->version), "%s", sorted[i].version);
+		snprintf(server->bridge, sizeof(server->bridge), "%s", sorted[i].bridge);
+		server->playing = sorted[i].playing;
 		server->players = sorted[i].players;
 		server->maximum_players = sorted[i].maximum_players;
 		server->password = sorted[i].password;

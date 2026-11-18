@@ -48,6 +48,8 @@ struct ce_link_message
 	uint16_t serial;
 	uint16_t size;
 	unsigned long sent_ms;
+	/* sent again (no round trip is measured from it) */
+	int resent;
 	unsigned char data[CE_MAXIMUM_PACKET];
 };
 
@@ -58,7 +60,9 @@ struct ce_link
 	uint16_t port;
 	int state;
 	uint32_t seed, version;
-	unsigned long started_ms, last_send_ms, last_receive_ms, ack_since_ms;
+	unsigned long started_ms, last_send_ms, last_receive_ms, ack_since_ms, last_poll_ms;
+	/* our reliable messages' round trip, smoothed (0 none measured yet) */
+	unsigned long round_trip_ms;
 	unsigned char challenge[CE_CHALLENGE_SIZE];
 	char secret[CE_SECRET_SIZE];
 	unsigned char public_key[CE_KEY_SIZE], key[CE_KEY_SIZE];
@@ -74,6 +78,8 @@ struct ce_link
 		uint16_t serial;
 		uint16_t size;
 		int type;
+		/* decrypted and its CRC checked already */
+		int opened;
 		unsigned char data[CE_MAXIMUM_PACKET];
 	} ahead[CE_LINK_AHEAD];
 	int ahead_count;
@@ -99,5 +105,9 @@ void ce_link_poll(struct ce_link *link, unsigned long now_ms, ce_link_receiver *
 int ce_link_send(struct ce_link *link, int reliable, const unsigned char *data, int size, unsigned long now_ms);
 /* says goodbye and closes the socket */
 void ce_link_close(struct ce_link *link, unsigned long now_ms);
+/* while the game cannot poll (a map loading): a GT2 ping every few seconds,
+reading nothing, so that the server does not take the silence for a
+player gone */
+void ce_link_heartbeat(struct ce_link *link, unsigned long now_ms);
 
 #endif

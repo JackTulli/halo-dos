@@ -232,6 +232,8 @@ int dos_ce_active(void);
 const char *dos_ce_status(void);
 int dos_ce_downloading(void);
 void dos_ce_leave(void);
+/* while a map loads: a Custom Edition server kept hearing from us */
+void dos_ce_heartbeat(void);
 /* QUICK JOIN: the best game to join among those found (the most players
 short of full, the shortest answer time, of the kinds shown) joined now, or
 once a search has had a few seconds (start_search: a search begun first);

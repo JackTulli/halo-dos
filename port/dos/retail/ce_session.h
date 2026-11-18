@@ -67,6 +67,14 @@ struct ce_session
 	(old packet 33, its two longs as sent): the session has ended */
 	int reconnect;
 	long reconnect_longs[2];
+	/* players the server took out of the game (old packet 24: its network
+	player, 32 bytes, and a long), for the game to remove (ce_session_removed) */
+	struct
+	{
+		unsigned char player[32];
+		long value;
+	} removed[8];
+	int removed_count;
 	unsigned long state_ms;
 	uint32_t seed;
 	char error[96];

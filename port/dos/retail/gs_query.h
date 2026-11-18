@@ -33,6 +33,10 @@ struct gs_query_server
 	int tries, ping_ms;
 	char name[64], map[32], game_type[32], variant[32], version[24];
 	int players, maximum_players, password, dedicated;
+	/* a ChupathingyCE dedicated server's "bridge" key ("" for Gearbox's), and
+	whether its game is on (gamemode openplaying) */
+	char bridge[16];
+	int playing;
 };
 
 struct gs_query

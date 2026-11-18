@@ -187,6 +187,15 @@ static void handle_packet(struct ce_session *session, int type, const void *deco
 		strcpy(session->error, "the server ended the game");
 		set_state(session, _ce_session_ended, now_ms);
 		break;
+	case _ce_packet_server_remove_player_ingame:
+		/* (a player left: kept for the game, which knows its players) */
+		if (session->removed_count < (int)(sizeof(session->removed) / sizeof(session->removed[0])))
+		{
+			memcpy(session->removed[session->removed_count].player, decoded, 32);
+			memcpy(&session->removed[session->removed_count].value, (const char *)decoded + 32, 4);
+			session->removed_count++;
+		}
+		break;
 	case _ce_packet_server_reconnect:
 	{
 		/* (the next game in the server's rotation: a client joins it again,

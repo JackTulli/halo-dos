@@ -90,6 +90,18 @@ void object_damage_update(long object_index);
 long game_engine_write_network_state(byte *buffer, long size);
 void game_engine_read_network_state(byte const *buffer, long size);
 boolean main_menu_is_active(void);
+boolean player_handle_powerup(long player_index, short powerup_type, short duration);
+void player_delete(long player_index);
+/* (tools/dos_hooks.py ce_client_game_types: the engine's HUD messages and
+each game type's scores, set from a CE server's) */
+void dos_ce_multiplayer_message(long player_index, long message, long message_data);
+void dos_ce_ctf_update(long red_score, long blue_score, long flag_swap_timer);
+void dos_ce_slayer_update(long const *team_scores, long const *individual_scores, long count);
+void dos_ce_oddball_update(long const *team_seconds, long const *individual_seconds, long count, long const *carriers,
+	long carrier_count);
+void dos_ce_king_update(long const *team_seconds, long count, long hill_id);
+void dos_ce_race_update(long const *team_laps, long const *first_flags, long const *lap_flags, long count,
+	unsigned long lap_completed_value, long rally_flag);
 
 /* the CE server's limits */
 #define CE_NETWORK_OBJECTS 512
@@ -114,6 +126,17 @@ the positions' encoding alone would trip below these) */
 #define CE_HISTORY 64
 /* the client's ping of the server (old packet 1), every so often (5.4) */
 #define CE_PING_MS 3000
+/* the game's multiplayer sounds (game_engine_multiplayer_sounds.c's, to
+_multiplayer_sound_ting: the server numbers them as it does) */
+#define CE_MULTIPLAYER_SOUNDS 43
+/* HUD messages: ours and Custom Edition's are the same to the time left
+(30); then CE has its own "You were telefragged" (31), and a game type's
+start at 32, where ours start at 30 (ChupathingyCE's CE server, every one
+checked on a real client) */
+#define CE_MESSAGE_TIME_LEFT 30
+#define CE_MESSAGE_TELEFRAGGED 31
+#define CE_FIRST_GAME_TYPE_MESSAGE 32
+#define FIRST_GAME_TYPE_MESSAGE 30
 
 /* (game.c's, as network_game_manager.c copies it) */
 struct game_options
@@ -206,6 +229,12 @@ static struct
 	unsigned long statistics_ms;
 	long own_updates, corrections, inputs_sent, inputs_refused, objects_made, dropped_updates;
 	real largest_correction;
+	/* the server's next game: joined again at this time (it says how long
+	to wait: a second; joined at once, its old game was still there) */
+	int reconnecting;
+	unsigned long reconnect_at_ms;
+	/* the game type's universal flags' "friends only on the radar" (bit 6) */
+	int friends_only_radar;
 } ce;
 
 static unsigned long now_ms(void)
@@ -698,17 +727,86 @@ static long unit_of_player(long player_index)
 	return player->unit_index;
 }
 
+/* a player the server no longer has: the objects forget it (as the game's
+own network client does when another player takes its slot:
+network_game_manager.c), then it goes, and its number is free */
+static void remove_player(long network_index)
+{
+	struct object_iterator iterator;
+	struct object_datum *object;
+	long player_index = player_of(network_index);
+
+	if (player_index == NONE)
+		return;
+	object_iterator_new(&iterator, _object_mask_all, 0);
+	while ((object = (struct object_datum *)object_iterator_next(&iterator)) != NULL)
+	{
+		if (object->object.owner_player_index == player_index)
+			object->object.owner_player_index = NONE;
+		if (TEST_FLAG(_object_mask_unit, object->object.type))
+		{
+			struct unit_datum *unit = (struct unit_datum *)object;
+			short attacker;
+
+			if (unit->unit.player_index == player_index)
+				unit->unit.player_index = NONE;
+			for (attacker = 0; attacker < MAXIMUM_ATTACKERS_PER_UNIT; attacker++)
+				if (unit->unit.attackers[attacker].player_index == player_index)
+					unit->unit.attackers[attacker].player_index = NONE;
+		}
+	}
+	player_delete(player_index);
+	ce.players[network_index].index = NONE;
+	memset(ce.score_baselines[network_index], 0, sizeof(ce.score_baselines[network_index]));
+}
+
 static void create_player(const ce_message_header *header, const void *body)
 {
 	struct network_player network_player;
 	long network_index = get_int(header, 1, body, "translated_player_index", 0);
 	long list_index = get_int(header, 1, body, "player_list_index", 0);
+	long raw_index = get_int(header, 1, body, "raw_player_index", NONE);
 	short local_player_index = NONE;
 	long player_index;
 	int i;
 
-	if (network_index <= 0 || network_index >= CE_NETWORK_PLAYERS || player_of(network_index) != NONE)
+	if (network_index <= 0 || network_index >= CE_NETWORK_PLAYERS)
 		return;
+	/* (one the server has made already, sent again when its team or its
+	place in the list changes: the real client then updates both (4);
+	another player under a number freed by one who left: that one goes) */
+	if (player_of(network_index) != NONE)
+	{
+		long existing = player_of(network_index);
+
+		if (raw_index == NONE || !(raw_index >> 16) || raw_index == existing)
+		{
+			struct player_datum *player = player_get(existing);
+			long team = get_int(header, 1, body, "team_index", player->team_index);
+
+			ce.players[network_index].list_index = (int)list_index;
+			player->team_index = team;
+			player->network_player_data.team_index = (char)team;
+			player->network_player_data.player_list_index = (char)list_index;
+			if (player->unit_index != NONE && object_try_and_get(player->unit_index))
+				object_get(player->unit_index)->object.owner_team_index = (short)team;
+			return;
+		}
+		remove_player(network_index);
+	}
+	/* (a datum of ours at the server's index still: a player who left
+	without our hearing, under another number) */
+	if (raw_index != NONE && (raw_index >> 16))
+	{
+		long other;
+
+		for (other = 1; other < CE_NETWORK_PLAYERS; other++)
+			if (other != network_index && ce.players[other].index != NONE &&
+				DATUM_INDEX_TO_ABSOLUTE_INDEX(ce.players[other].index) == DATUM_INDEX_TO_ABSOLUTE_INDEX(raw_index))
+			{
+				remove_player(other);
+			}
+	}
 	memset(&network_player, 0, sizeof(network_player));
 	/* (the game settings' entry: its name, colour and machine; ours is the
 	one on the machine the server gave us in its challenge) */
@@ -791,6 +889,25 @@ static void spawn_player(const ce_message_header *header, const void *body)
 	if (vehicle_index != NONE)
 		network_objects_set_seat(unit_index, vehicle_index, (short)get_int(header, 1, body, "vehicle_seat_index", 0));
 	ce.players[network_index].position_sequence = -1;
+	/* (its powerups' times: none, then those the server gives, active
+	camouflage and full-spectrum vision, 4) */
+	{
+		struct player_datum *player = player_get(player_index);
+		short powerup;
+
+		for (powerup = 0; powerup < NUMBER_OF_PLAYER_POWERUPS; powerup++)
+			player->powerup_durations[powerup] = 0;
+		for (powerup = 0; powerup < NUMBER_OF_PLAYER_POWERUPS && powerup < 2; powerup++)
+		{
+			char name[24];
+			long duration;
+
+			snprintf(name, sizeof(name), "powerup_durations[%d]", powerup);
+			duration = get_int(header, 1, body, name, 0);
+			if (duration > 0)
+				player_handle_powerup(player_index, powerup, (short)duration);
+		}
+	}
 }
 
 /* unit_kill: dead, the player's respawn timer, the index freed (4) */
@@ -1116,6 +1233,26 @@ static void take_settings(const ce_message_header *header, const void *body)
 	if (found)
 		ce.variant = *found;
 	memcpy(&ce.variant.universal_variant, pc_variant + 0x34, 0x2C);
+	/* (the game type's own options: Halo PC's engine variant (56 bytes at
+	0x9C) starts as the Xbox's does, as ChupathingyCE's CE server sends ours
+	to real clients: one flag CTF, a moving hill, Oddball's and Race's) */
+	memcpy(&ce.variant.game_engine_variant, pc_variant + 0x9C, sizeof(ce.variant.game_engine_variant));
+	/* (its name, as the server's scoreboard has it) */
+	{
+		int i;
+
+		for (i = 0; i < (int)NUMBEROF(ce.variant.human_readable_game_description) - 1; i++)
+		{
+			unsigned short c = (unsigned short)(pc_variant[2 * i] | pc_variant[2 * i + 1] << 8);
+
+			ce.variant.human_readable_game_description[i] = (wchar_t)c;
+			if (!c)
+				break;
+		}
+		ce.variant.human_readable_game_description[NUMBEROF(ce.variant.human_readable_game_description) - 1] = 0;
+	}
+	/* (universal flags at 0x38: bit 6, others on the radar are friends only) */
+	ce.friends_only_radar = (pc_variant[0x38] & 0x41) == 0x41;
 	/* (its players: the PC's network_player is laid out as this game's) */
 	count = get_int(header, 1, body, "player_count", 0);
 	if (players && count >= 0 && count <= 16)
@@ -1150,49 +1287,122 @@ static void take_scores(const ce_message_header *header, const void *header_fiel
 	statistics->friendly_fire_kills = (short)get_int(header, 1, body, "friendly_fire_kills", 0);
 	statistics->deaths = (short)get_int(header, 1, body, "deaths", 0);
 	statistics->suicides = (short)get_int(header, 1, body, "suicides", 0);
+	/* (the game type's three: CTF's grabs, returns and captures, Oddball's,
+	Race's laps; King's time on the hill is sent in seconds (3.6)) */
+	{
+		long first = get_int(header, 1, body, "multiplayer_stats.ctf_statistics.flag_grabs", 0);
+
+		if (ce.game_engine_index == game_engine_king)
+			first = first * TICKS_PER_SECOND > 32767 ? 32767 : first * TICKS_PER_SECOND;
+		statistics->multiplayer_statistics.ctf_statistics.flag_grabs = (short)first;
+		statistics->multiplayer_statistics.ctf_statistics.flag_returns =
+			(short)get_int(header, 1, body, "multiplayer_stats.ctf_statistics.flag_returns", 0);
+		statistics->multiplayer_statistics.ctf_statistics.flag_scores =
+			(short)get_int(header, 1, body, "multiplayer_stats.ctf_statistics.flag_scores", 0);
+	}
+	/* (Slayer's target, and the speed the game type gives (the ball's
+	carrier): our own movement guessed at another speed than the server's
+	was pulled back) */
+	player_get(player_index)->multiplayer_special = get_int(header, 1, body, "special", NONE);
+	{
+		real speed = get_real(header, 1, body, "speed_multiplier");
+
+		if (speed > 0.0f && speed < 10.0f)
+			player_get(player_index)->speed_multiplier = speed;
+	}
 }
 
-/* the game type's scores (3.6): slayer's, oddball's (teams and players by
-absolute index) and capture the flag's (teams) into the game type's own
-state, through the state a Delta host sends its clients (game_engine.c's
-read and write); king's and race's are kept as baselines only */
-static void take_game_scores(const ce_message_header *header, const void *body)
+/* an array field of 32-bit numbers: count of them; FALSE when the message
+has no such field */
+static int field_longs(const ce_message_header *header, const void *body, const char *name, long *out, int count)
 {
-	static unsigned char state[4096];
-	const ce_field_ref *team = field(header, 1, header->type == CE_MSG_CTF_UPDATE ? "score" : "team_score");
-	const ce_field_ref *individual = field(header, 1, "individual_score");
-	long size, team_at, individual_at, teams, i;
+	const ce_field_ref *ref = field(header, 1, name);
+	int i;
+
+	if (!ref)
+		return FALSE;
+	for (i = 0; i < count; i++)
+	{
+		int32_t value;
+
+		memcpy(&value, (const char *)ce_field_ptr(body, ref) + i * 4, 4);
+		out[i] = value;
+	}
+	return TRUE;
+}
+
+/* the player at the server's absolute index (its per-player arrays' index:
+players are made at the server's own datum, create_player) */
+static long player_at_absolute(long absolute)
+{
+	long player;
+
+	for (player = 1; player < CE_NETWORK_PLAYERS; player++)
+		if (ce.players[player].index != NONE && DATUM_INDEX_TO_ABSOLUTE_INDEX(ce.players[player].index) == absolute)
+			return ce.players[player].index;
+	return NONE;
+}
+
+/* the game type's scores (3.6): every game type's, straight into its state
+(tools/dos_hooks.py ce_client_game_types): teams by team, players by
+absolute index; Oddball's and King's in seconds; Oddball's carriers by
+player (the ball's number + 1, 0 none) */
+static void take_game_scores(const ce_message_header *header, const void *header_fields, const void *body)
+{
+	long first[16], second[16], third[16];
 	int engine = header->type == CE_MSG_SLAYER_UPDATE ? game_engine_slayer : header->type == CE_MSG_CTF_UPDATE ?
-		game_engine_ctf : header->type == CE_MSG_ODDBALL_UPDATE ? game_engine_oddball : NONE;
+		game_engine_ctf : header->type == CE_MSG_ODDBALL_UPDATE ? game_engine_oddball :
+		header->type == CE_MSG_KING_UPDATE ? game_engine_king : header->type == CE_MSG_RACE_UPDATE ? game_engine_race :
+		NONE;
 
 	if (header->def->body_size <= sizeof(ce.engine_baselines[0]))
 		memcpy(ce.engine_baselines[header->type - CE_MSG_SLAYER_UPDATE], body, header->def->body_size);
 	/* (the game type the server plays, which the variant was made from) */
-	if (engine == NONE || ce.game_engine_index != engine || !team)
+	if (engine == NONE || ce.game_engine_index != engine)
 		return;
-	size = game_engine_write_network_state(state, sizeof(state));
-	/* (after the postgame state: slayer's and oddball's team scores, then
-	their players'; capture the flag's two flags' weapons, then the scores) */
-	team_at = sizeof(long) + (engine == game_engine_ctf ? 2 * sizeof(long) : 0);
-	individual_at = team_at + HALO_PORT_MAXIMUM_NETWORK_PLAYERS * sizeof(long);
-	teams = engine == game_engine_ctf ? 2 : 16;
-	if (teams > HALO_PORT_MAXIMUM_NETWORK_PLAYERS)
-		teams = HALO_PORT_MAXIMUM_NETWORK_PLAYERS;
-	if (size < individual_at + (long)(teams * sizeof(long)))
-		return;
-	for (i = 0; i < teams; i++)
+	switch (header->type)
 	{
-		int32_t value;
-
-		memcpy(&value, (const char *)ce_field_ptr(body, team) + i * 4, 4);
-		memcpy(state + team_at + i * sizeof(long), &(long){ value }, sizeof(long));
-		if (individual && engine != game_engine_ctf)
+	case CE_MSG_SLAYER_UPDATE:
+		if (field_longs(header, body, "team_score", first, 16) && field_longs(header, body, "individual_score", second, 16))
+			dos_ce_slayer_update(first, second, 16);
+		break;
+	case CE_MSG_CTF_UPDATE:
+		if (field_longs(header, body, "score", first, 2))
 		{
-			memcpy(&value, (const char *)ce_field_ptr(body, individual) + i * 4, 4);
-			memcpy(state + individual_at + i * sizeof(long), &(long){ value }, sizeof(long));
+			dos_ce_ctf_update(first[0], first[1], header_fields && field(header, 0, "flag_swap_timer") ?
+				get_int(header, 0, header_fields, "flag_swap_timer", NONE) : NONE);
 		}
+		break;
+	case CE_MSG_ODDBALL_UPDATE:
+		if (field_longs(header, body, "team_score", first, 16) && field_longs(header, body, "individual_score", second, 16) &&
+			field_longs(header, body, "current_ball_owner", third, 16))
+		{
+			long carriers[MAXIMUM_ODDBALLS];
+			int i;
+
+			for (i = 0; i < MAXIMUM_ODDBALLS; i++)
+				carriers[i] = NONE;
+			for (i = 0; i < 16; i++)
+				if (third[i] > 0 && third[i] <= MAXIMUM_ODDBALLS)
+					carriers[third[i] - 1] = player_at_absolute(i);
+			dos_ce_oddball_update(first, second, 16, carriers, MAXIMUM_ODDBALLS);
+		}
+		break;
+	case CE_MSG_KING_UPDATE:
+		if (field_longs(header, body, "score", first, 16))
+			dos_ce_king_update(first, 16, get_int(header, 1, body, "hill_id", 0));
+		break;
+	case CE_MSG_RACE_UPDATE:
+		if (field_longs(header, body, "team_laps", first, 16) && field_longs(header, body, "first_flag", second, 16) &&
+			field_longs(header, body, "lap_bit_vector", third, 16))
+		{
+			dos_ce_race_update(first, second, third, 16, (unsigned long)get_int(header, 1, body, "lap_completed_value", 0),
+				get_int(header, 1, body, "rally_flag", NONE));
+		}
+		break;
+	default:
+		break;
 	}
-	game_engine_read_network_state(state, size);
 }
 
 /* a weapon into the unit's first free slot (or the one given), shown on its
@@ -1296,6 +1506,14 @@ static int load_map(void)
 		game_unload();
 	}
 	game_set_game_variant(&ce.variant);
+	/* (others on the radar friends only, as the server's game type has it) */
+	if (ce.friends_only_radar && game_variant_options_get())
+	{
+		struct game_variant_options radar = *game_variant_options_get();
+
+		radar.radar_players = _radar_players_friends;
+		game_set_game_variant_options(&radar);
+	}
 	if (!game_load(&options))
 		return FALSE;
 	game_initialize_for_new_map();
@@ -1435,7 +1653,14 @@ static void message(void *context, int reliable, const ce_message_header *header
 			break;
 		for (player = 1; player < CE_NETWORK_PLAYERS; player++)
 			if (ce.players[player].index != NONE && ce.players[player].list_index == list_index)
-				player_get(ce.players[player].index)->team_index = team;
+			{
+				struct player_datum *moved = player_get(ce.players[player].index);
+
+				moved->team_index = team;
+				moved->network_player_data.team_index = (char)team;
+				if (moved->unit_index != NONE && object_try_and_get(moved->unit_index))
+					object_get(moved->unit_index)->object.owner_team_index = (short)team;
+			}
 		if (list_index >= 0 && list_index < ce.settings_player_count)
 			ce.settings_players[list_index].team_index = (char)team;
 		break;
@@ -1446,7 +1671,7 @@ static void message(void *context, int reliable, const ce_message_header *header
 	case CE_MSG_KING_UPDATE:
 	case CE_MSG_RACE_UPDATE:
 		if (ce.loaded)
-			take_game_scores(header, body);
+			take_game_scores(header, header_fields, body);
 		break;
 	case CE_MSG_LOCAL_PLAYER_VEHICLE_UPDATE:
 		if (ce.loaded)
@@ -1576,6 +1801,58 @@ static void message(void *context, int reliable, const ce_message_header *header
 			line[at++] = (wchar_t)ce.session.chat_text[i];
 		line[at] = 0;
 		chat_note_wide(line);
+		break;
+	}
+	case CE_MSG_MULTIPLAYER_HUD_MESSAGE:
+	{
+		/* (a message on our player's HUD, numbered as Custom Edition's: the
+		kill feed, sprees, flags, the hill, the lead) */
+		long player_index = player_of(get_int(header, 1, body, "player_index", 0));
+		long number = get_int(header, 1, body, "message", NONE);
+		long data = get_int(header, 1, body, "message_data", NONE);
+		struct player_datum *player;
+
+		if (!ce.loaded || player_index == NONE || number < 0)
+			break;
+		player = player_get(player_index);
+		if (player->local_player_index == NONE)
+			break;
+		if (number == CE_MESSAGE_TELEFRAGGED)
+		{
+			hud_print_message(player->local_player_index, L"You were telefragged");
+			break;
+		}
+		/* (the welcome: shown already as the player was made
+		(game_engine_player_added); the time left: CE's own, which is a
+		game type's number here) */
+		if (number == 0 || number == CE_MESSAGE_TIME_LEFT)
+			break;
+		if (number >= CE_FIRST_GAME_TYPE_MESSAGE)
+			number = number - CE_FIRST_GAME_TYPE_MESSAGE + FIRST_GAME_TYPE_MESSAGE;
+		/* (a player the message names must be one we have: its text looks
+		the player up unchecked) */
+		if (data != NONE && (data >> 16) != 0 && !player_try_and_get(data))
+			break;
+		dos_ce_multiplayer_message(player_index, number, data);
+		break;
+	}
+	case CE_MSG_MULTIPLAYER_SOUND:
+	{
+		/* (the announcer: the server's game's sounds, not those a client
+		plays itself (respawns, a message's)) */
+		long sound = get_int(header, 1, body, "index", NONE);
+
+		if (ce.loaded && sound >= 0 && sound < CE_MULTIPLAYER_SOUNDS)
+			game_engine_play_multiplayer_sound(sound);
+		break;
+	}
+	case CE_MSG_PLAYER_HANDLE_POWERUP:
+	{
+		long player_index = player_of(get_int(header, 1, body, "player_index", 0));
+		long powerup = get_int(header, 1, body, "powerup_type", NONE);
+
+		if (ce.loaded && unit_of_player(player_index) != NONE && powerup >= 0 && powerup < NUMBER_OF_PLAYER_POWERUPS)
+			player_handle_powerup(player_index, (short)powerup, (short)get_int(header, 1, body, "duration_in_ticks", 0));
 		break;
 	}
 	case CE_MSG_SV_MOTD:
@@ -1893,7 +2170,45 @@ void dos_ce_frame(void)
 		}
 		return;
 	}
+	/* (the server's next game: joined again after the wait it asked for) */
+	if (ce.reconnecting)
+	{
+		if ((long)(now_ms() - ce.reconnect_at_ms) < 0)
+			return;
+		ce.reconnecting = FALSE;
+		if (!join())
+		{
+			if (ce.map_up)
+				dos_ce_leave();
+			ce.active = FALSE;
+		}
+		return;
+	}
 	ce_session_poll(&ce.session, now_ms());
+	/* (players the server took out: by their machine and name) */
+	while (ce.session.removed_count > 0)
+	{
+		const struct network_player *gone =
+			(const struct network_player *)ce.session.removed[--ce.session.removed_count].player;
+		long player;
+
+		if (!ce.loaded)
+			continue;
+		for (player = 1; player < CE_NETWORK_PLAYERS; player++)
+		{
+			struct player_datum *datum;
+
+			if (ce.players[player].index == NONE || player == ce.local_network_player)
+				continue;
+			datum = player_get(ce.players[player].index);
+			if (datum->network_player_data.machine_index == gone->machine_index &&
+				!memcmp(datum->name, gone->name, sizeof(datum->name)))
+			{
+				remove_player(player);
+				break;
+			}
+		}
+	}
 	switch (ce.session.state)
 	{
 	case _ce_session_joined:
@@ -1948,9 +2263,12 @@ void dos_ce_frame(void)
 		settings come, this one up until then) */
 		if (ce.session.state == _ce_session_ended && ce.session.reconnect)
 		{
+			long wait = ce.session.reconnect_longs[1];
+
 			ce_session_end(&ce.session, now_ms());
-			if (join())
-				break;
+			ce.reconnecting = TRUE;
+			ce.reconnect_at_ms = now_ms() + (unsigned long)(wait < 0 ? 0 : wait > 10000 ? 10000 : wait);
+			break;
 		}
 		/* (the server's map not here: downloaded as Chimera downloads it, the
 		setting map_download off leaves it; once a join, so a map the
@@ -1963,6 +2281,9 @@ void dos_ce_frame(void)
 			snprintf(ce.status, sizeof(ce.status), "downloading %s", ce.session.map_name);
 			break;
 		}
+		/* (the socket closed whatever the end: a join refused before the map
+		was up kept it, and repeated ones ran mTCP out of sockets) */
+		ce_session_end(&ce.session, now_ms());
 		if (ce.map_up)
 			dos_ce_leave();
 		ce.active = FALSE;
@@ -1970,4 +2291,13 @@ void dos_ce_frame(void)
 	default:
 		break;
 	}
+}
+
+/* while a map loads (the game does not poll): the server kept hearing from
+us, so it does not drop us as gone (dos_render_game.c's loading screen,
+xdk_kernel.c's Sleep) */
+void dos_ce_heartbeat(void)
+{
+	if (ce.active && !ce.downloading && !ce.reconnecting)
+		ce_link_heartbeat(&ce.session.link, now_ms());
 }
