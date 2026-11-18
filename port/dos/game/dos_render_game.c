@@ -1196,8 +1196,14 @@ void render_frame(
 		r_view_set_near(view.z_near);
 		time_phase(_time_first_person);
 		r_view_end();
-		/* the game's own HUD (dos_hud_game.c) */
-		interface_draw_screen();
+		/* the game's own HUD (dos_hud_game.c), not under the pause menu (its
+		meters and prompts showed through the menu's rows) */
+		{
+			extern int dos_pause_active(void);
+
+			if (!dos_pause_active())
+				interface_draw_screen();
+		}
 		time_phase(_time_hud);
 	}
 }

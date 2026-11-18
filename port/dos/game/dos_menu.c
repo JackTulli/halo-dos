@@ -535,7 +535,8 @@ static void scripted_keys(void)
 		const char *name;
 		int key;
 	} names[] = { { "up", SYSTEM_KEY_UP }, { "down", SYSTEM_KEY_DOWN }, { "left", SYSTEM_KEY_LEFT },
-		{ "right", SYSTEM_KEY_RIGHT }, { "enter", SYSTEM_KEY_ENTER }, { "esc", SYSTEM_KEY_ESCAPE }, { "wait", 0 } };
+		{ "right", SYSTEM_KEY_RIGHT }, { "enter", SYSTEM_KEY_ENTER }, { "esc", SYSTEM_KEY_ESCAPE }, { "tab", SYSTEM_KEY_TAB },
+		{ "f", SYSTEM_KEY_F }, { "q", SYSTEM_KEY_Q }, { "r", SYSTEM_KEY_R }, { "wait", 0 } };
 	static const char *next;
 	static unsigned long long at;
 	static int repeat_key, repeats;
@@ -851,15 +852,20 @@ static unsigned long pulsing(void)
 
 /* a box chosen: the Xbox's chosen option bar (option_bkds' second: a
 rounded blue outline), else a framed fill */
-static void chosen_box(int x0, int y0, int x1, int y1)
+static void chosen_box_faded(int x0, int y0, int x1, int y1, float in)
 {
 	if (dos_art_has(DOS_ART_ROW, 1))
 	{
-		dos_art_frame(DOS_ART_ROW, 1, NULL, 8, 7.0f, (float)x0, (float)y0, (float)x1, (float)y1, 0xFFFFFFFFUL);
+		dos_art_frame(DOS_ART_ROW, 1, NULL, 8, 7.0f, (float)x0, (float)y0, (float)x1, (float)y1, faded(0xFFFFFFFFUL, in));
 		return;
 	}
-	fill(x0, y0, x1, y1, CHOSEN_COLOR);
-	frame_box(x0, y0, x1, y1, FRAME_COLOR);
+	fill(x0, y0, x1, y1, faded(CHOSEN_COLOR, in));
+	frame_box(x0, y0, x1, y1, faded(FRAME_COLOR, in));
+}
+
+static void chosen_box(int x0, int y0, int x1, int y1)
+{
+	chosen_box_faded(x0, y0, x1, y1, 1.0f);
 }
 
 /* an arrow (a list's more rows) up or down, centred at x */
@@ -990,25 +996,23 @@ static int pad_used_last(void)
 	return dos_input()->pad_count > 0 && dos_pad_used_at() > dos_keyboard_used_at();
 }
 
-/* a key's cap: its name in a small framed box; how wide it is */
+/* a key's cap: its name in a thin outline (no fill: the button key's line
+is the backdrop's dark band already), at least about square; how wide it is */
 static int key_cap(int x, int y, const char *name, unsigned long color, int draw, real scale)
 {
 	long font = font_help();
 	int width = text_width(font, name, scale * 0.9f) + 12;
 
+	/* (as tall as its letters need: a line made smaller to fit takes
+	smaller caps) */
+	int height = (int)(20.0f * (scale < 1.0f ? scale : 1.0f) + 0.5f), top = y + 11 - height / 2;
+
+	if (width < height + 2)
+		width = height + 2;
 	if (draw)
 	{
-		if (dos_art_has(DOS_ART_ROW, 1))
-		{
-			dos_art_frame(DOS_ART_ROW, 1, NULL, 8, 6.0f, (float)x, (float)y, (float)(x + width), (float)(y + 21),
-				faded(0xFFFFFFFFUL, (float)(color >> 24) / 255.0f));
-		}
-		else
-		{
-			fill(x, y, x + width, y + 20, faded(0xC0081830UL, (float)(color >> 24) / 255.0f));
-			frame_box(x, y, x + width, y + 20, faded(FRAME_COLOR, (float)(color >> 24) / 255.0f));
-		}
-		text_at(font, x, y + 1, x + width, y + 20, JUSTIFY_CENTER, color, name, scale * 0.9f);
+		frame_box(x, top, x + width, top + height, faded(FRAME_COLOR, (float)(color >> 24) / 255.0f));
+		text_at(font, x, top + 1, x + width, top + height - 1, JUSTIFY_CENTER, color, name, scale * 0.9f);
 	}
 	return width;
 }
@@ -2936,7 +2940,9 @@ static void draw_row(int index, int y)
 	int x0 = list_x0 - (int)(24.0f * (1.0f - in)), x1 = list_x1 - (int)(24.0f * (1.0f - in));
 	unsigned long color = faded(chosen ? TEXT_BRIGHT : TEXT_COLOR, in);
 
-	if (option_page && !chosen)
+	/* (the option's bar behind a setting; a button (START GAME, BACK) its
+	words alone, the chosen one's bar the page's) */
+	if (option_page && !chosen && (stepped || value[0]))
 	{
 		dos_art_frame(DOS_ART_ROW, 0, NULL, 8, 7.0f, (float)x0, (float)(y - 2), (float)x1, (float)(y + ROW_H + 2),
 			faded(0xFFFFFFFFUL, in));
@@ -2944,43 +2950,48 @@ static void draw_row(int index, int y)
 	text(font_large, x0 + 13, y, x1, y + ROW_H, JUSTIFY_LEFT, color, label);
 	if (stepped || value[0])
 	{
-		int label_right = x0 + 13 + text_width(font_large, label, text_scale()) + 16;
+		int label_right = x0 + 13 + text_width(font_large, label, text_scale()) + 28;
 		/* (the value's place: centred from 56% of the bar, the Xbox's
-		spinner's; a value too long for it from the name's end, to the
-		right) */
-		int value_x0 = x0 + (x1 - x0) * 56 / 100, value_x1 = x1 - 10;
+		spinner's; a value too long for it a little smaller there, else
+		from the name's end, to the right, and cut short of the name where
+		it must be: the panel says it whole) */
+		int value_x0 = x0 + (x1 - x0) * 56 / 100, value_x1 = x1 - 10, needed;
 		short justify = JUSTIFY_CENTER;
+		real value_scale = text_scale();
 
 		if (value_x0 < label_right)
 			value_x0 = label_right;
 		/* (a setting waiting for APPLY AND RESTART: marked) */
 		snprintf(shown, sizeof(shown), "%s%s", value, row_pending(row) ? " *" : "");
-		if (text_width(font_large, shown, text_scale()) > value_x1 - value_x0)
+		needed = text_width(font_large, shown, value_scale);
+		if (needed > value_x1 - value_x0 && needed * 4 <= (value_x1 - value_x0) * 5)
+			value_scale *= (real)(value_x1 - value_x0) / (real)needed;
+		else if (needed > value_x1 - value_x0)
 		{
 			value_x0 = label_right;
 			justify = JUSTIFY_RIGHT;
-		}
-		/* (a long value cut short of the name: the panel says it whole) */
-		if (text_width(font_large, shown, text_scale()) > value_x1 - value_x0)
-		{
-			char whole[96];
+			if (needed > value_x1 - value_x0 && needed * 4 <= (value_x1 - value_x0) * 5)
+				value_scale *= (real)(value_x1 - value_x0) / (real)needed;
+			else if (needed > value_x1 - value_x0)
+			{
+				char whole[96];
 
-			snprintf(whole, sizeof(whole), "%s", shown);
-			fit_string(font_large, whole, value_x1 - value_x0, shown, sizeof(shown));
+				snprintf(whole, sizeof(whole), "%s", shown);
+				fit_string(font_large, whole, value_x1 - value_x0, shown, sizeof(shown));
+			}
 		}
 		if (chosen)
 		{
 			text_glow(font_large, value_x0, y, value_x1, y + ROW_H, justify, faded(TEXT_BRIGHT, in), faded(GLOW_COLOR, in),
-				shown, text_scale());
+				shown, value_scale);
 		}
 		else
-			text(font_large, value_x0, y, value_x1, y + ROW_H, justify, faded(TEXT_COLOR, in), shown);
+			text_at(font_large, value_x0, y, value_x1, y + ROW_H, justify, faded(TEXT_COLOR, in), shown, value_scale);
 	}
 }
 
-/* the chosen row's bar (the Xbox's: an options page's outlined bar, a
-list's framed item, list_item_bkd's second, its first row's the top
-one), gliding to the row: drawn under the rows' words */
+/* the chosen row's bar (the Xbox's options' outlined bar, option_bkds'
+second), gliding to the row: drawn under the rows' words */
 static void draw_highlight(int y, float in)
 {
 	unsigned long long now = system_microseconds();
@@ -2996,19 +3007,10 @@ static void draw_highlight(int y, float in)
 	else
 		menu.highlight_y += ((float)y - menu.highlight_y) * (dt > 0.04f ? 1.0f : 1.0f - expf(-dt * 40.0f));
 	menu.highlight_screen = menu.screen;
-	if (option_page || !dos_art_has(DOS_ART_LIST_ITEM, 1))
-	{
-		chosen_box(x0, (int)menu.highlight_y - 2, x1, (int)menu.highlight_y + ROW_H + 2);
-		return;
-	}
-	{
-		static const int crop[4] = { 0, 0, 233, 32 };
-		enum dos_art art = menu.row == 0 && dos_art_has(DOS_ART_LIST_ITEM_TOP, 1) ? DOS_ART_LIST_ITEM_TOP :
-			DOS_ART_LIST_ITEM;
-
-		dos_art_frame(art, 1, crop, 10, 10.0f, (float)x0, menu.highlight_y - 4.0f, (float)x1,
-			menu.highlight_y + (float)ROW_H + 4.0f, faded(0xFFFFFFFFUL, in));
-	}
+	/* (the option's outlined bar, on a list's page too: the Xbox's list
+	item bar (list_item_bkd) is open at its right end, where its own page
+	joins it to a panel, and alone it looked cut off) */
+	chosen_box_faded(x0, (int)menu.highlight_y - 2, x1, (int)menu.highlight_y + ROW_H + 2, in);
 }
 
 /* lines of text in a box, broken at spaces to fit its width; the y after
@@ -3097,9 +3099,7 @@ static void draw_panel(int x0, int y0, int x1, int y1)
 	int x = x0 + 14, xr = x1 - 14, y = y0 + 14;
 	char line[96], help[160];
 
-	x0 += (int)(24.0f * (1.0f - in));
-	dos_art_frame(DOS_ART_SPLIT_PANEL, 0, NULL, 16, 10.0f, (float)x0, (float)y0, (float)x1, (float)y1,
-		faded(0xF0FFFFFFUL, in));
+	/* (on the backdrop, as the Xbox's descriptions are: no box) */
 	switch (menu.screen)
 	{
 	case SCREEN_CAMPAIGN:
@@ -3206,8 +3206,6 @@ static void draw_game_row(int index, int y)
 	unsigned long color = !game->compatible || !game->joinable ? TEXT_DIM : chosen ? TEXT_BRIGHT : TEXT_COLOR;
 	char cut[64], players[16], ping[16];
 
-	dos_art_frame(DOS_ART_ROW, 0, NULL, 6, 5.0f, (float)GAME_X0, (float)(y - 2), (float)GAME_X1, (float)(y + ROW_H + 2),
-		0x90FFFFFFUL);
 	fit_string(font_large, game->name, columns.map_x - columns.name_x - 12, cut, sizeof(cut));
 	if (chosen)
 		text_glow(font_large, columns.name_x, y, columns.map_x, y + ROW_H, JUSTIFY_LEFT, TEXT_BRIGHT, GLOW_COLOR, cut,
@@ -3279,8 +3277,8 @@ static void draw_filter_box(void)
 	static const int rows[3] = { ROW_FILTER_FULL, ROW_FILTER_EMPTY, ROW_FILTER_JOINABLE };
 	int x0 = SCREEN_W / 2 - 170, x1 = SCREEN_W / 2 + 170, y0 = 130, y = y0 + 40;
 
-	dos_art_frame(DOS_ART_ALERT, 0, NULL, 16, 10.0f, (float)(x0 - 12), (float)y0, (float)(x1 + 12),
-		(float)(y0 + 50 + 4 * 32 + 10), 0xF8FFFFFFUL);
+	dos_art_frame(DOS_ART_PANEL, 0, NULL, 16, 10.0f, (float)(x0 - 12), (float)y0, (float)(x1 + 12),
+		(float)(y0 + 50 + 4 * 32 + 10), 0xFFFFFFFFUL);
 	add_hit(x0 - 12, y0, x1 + 12, y0 + 50 + 4 * 32 + 10, HIT_FILTER, -1);
 	text_glow(font_large, x0, y0 + 10, x1, y0 + 34, JUSTIFY_CENTER, TEXT_BRIGHT, GLOW_COLOR, "FILTERS", text_scale());
 	for (int i = 0; i < 4; i++, y += 32)
@@ -3401,8 +3399,6 @@ static void draw_results(void)
 	int y = LIST_TOP + 14;
 
 	page("RESULTS", NULL);
-	dos_art_frame(DOS_ART_ALERT, 0, NULL, 16, 10.0f, (float)(LIST_X0 - 40), (float)LIST_TOP, (float)(LIST_X1 + 40),
-		(float)LIST_BOTTOM, faded(0xF0FFFFFFUL, in));
 	for (int i = 0; i < menu.result_count && y < LIST_BOTTOM - 70; i++, y += 26)
 	{
 		text_fitted(i ? font_help() : font_large, LIST_X0 - 20, y, LIST_X1 + 20, y + 24, JUSTIFY_CENTER,
@@ -4093,11 +4089,9 @@ static void draw_page(void)
 	}
 	else if (menu.screen == SCREEN_PAUSE)
 	{
-		list_x0 = SCREEN_W / 2 - 150;
-		list_x1 = SCREEN_W / 2 + 150;
-		dos_art_frame(DOS_ART_ALERT, 0, NULL, 16, 10.0f, (float)(list_x0 - 24), (float)(top - 4), (float)(list_x1 + 24),
-			(float)(top + menu.row_count * step + 16), faded(0xF0FFFFFFUL, in));
-		top += 8;
+		/* (a list as the other pages', over the game the backdrop darkens) */
+		list_x0 = 51;
+		list_x1 = 372;
 	}
 	else if (menu.screen == SCREEN_NET_JOIN)
 	{
