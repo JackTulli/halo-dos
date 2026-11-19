@@ -84,7 +84,7 @@ Shown here four times larger, pixel for pixel.
 <td><img src="docs/screenshots/menu-custom-game.jpg" alt="The Custom Game page"><br><sub>Custom games with bots, on any map and game type</sub></td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/menu-graphics.jpg" alt="The Graphics settings page"><br><sub>Settings for everything from 8-bit colour to the Xbox look</sub></td>
+<td><img src="docs/screenshots/menu-graphics.jpg" alt="The Direct3D 8 settings page"><br><sub>Settings in sections, down to Direct3D 8's Xbox look</sub></td>
 <td><img src="docs/screenshots/ce-map-download.jpg" alt="Downloading a Custom Edition map while joining a server"><br><sub>Joining a Custom Edition server downloads its map</sub></td>
 </tr>
 <tr>

@@ -720,14 +720,16 @@ static struct
 {
 	unsigned long stamp;
 	/* what is under is first darkened to darken / 16 (the light maps, 16
-	as it is), then the colour added (add) or put there; covers 0: the texel
-	leaves the pixel as it is (a cut-out's hole too) */
-	unsigned char color, covers, darken;
+	as it is), then the colour added (add) or put there, or half blended
+	with it (half: an alpha blend's texel between a quarter and three
+	quarters); covers 0: the texel leaves the pixel as it is (a cut-out's
+	hole too) */
+	unsigned char color, covers, darken, half;
 } screen_colors[256];
 static unsigned long screen_stamp, stamp_quad, stamp_rgba;
 
 static void screen_color8(unsigned long texel, long r, long g, long b, long a, const unsigned char *add,
-	unsigned char *color, unsigned char *covers, unsigned char *darken)
+	unsigned char *color, unsigned char *covers, unsigned char *darken, unsigned char *half)
 {
 	unsigned long alpha = ((texel >> 24) * (unsigned long)(a >> 16)) >> 8;
 	unsigned long red = (((texel >> 16) & 0xFF) * (unsigned long)(r >> 16)) >> 8;
@@ -736,6 +738,7 @@ static void screen_color8(unsigned long texel, long r, long g, long b, long a, c
 
 	*covers = 1;
 	*darken = 16;
+	*half = 0;
 	if (screen_blend == _r_screen_premultiplied)
 	{
 		/* (premultiplied: the colour added as it is, over what is under
@@ -755,13 +758,17 @@ static void screen_color8(unsigned long texel, long r, long g, long b, long a, c
 	}
 	else
 	{
+		/* (an alpha blend in three steps, as the 8-bit models' are: none
+		under a quarter, half to three quarters, whole above: the menus'
+		dim items (under half) were not drawn at all) */
 		*color = r_palette_nearest((red << 16) | (green << 8) | blue);
-		*covers = screen_blend == _r_screen_opaque || alpha >= 128;
+		*covers = screen_blend == _r_screen_opaque || alpha >= 64;
+		*half = screen_blend != _r_screen_opaque && alpha < 192;
 	}
 }
 
-/* the screen's quads in 8 bits: covered where alpha is over half, the
-colour looked up (blends by the blend tables) */
+/* the screen's quads in 8 bits: an alpha blend in three steps (none, half,
+whole), the colour looked up (blends by the blend tables) */
 static void span8_screen(struct span *span, int textured)
 {
 	unsigned char *pixels = r_frame.pixels + (size_t)span->y * r_frame.pitch;
@@ -769,6 +776,7 @@ static void span8_screen(struct span *span, int textured)
 	long r = span->r, g = span->g, b = span->b, a = span->fog_r;
 	const unsigned char *add = screen_blend == _r_screen_add || screen_blend == _r_screen_premultiplied ?
 		r_palette_add_table() : NULL;
+	const unsigned char *blend = r_palette_blend_table();
 
 	if (textured && !span->dr && !span->dg && !span->db && !span->dfog_r)
 	{
@@ -799,7 +807,7 @@ static void span8_screen(struct span *span, int textured)
 		{ \
 			screen_colors[index].stamp = stamp; \
 			screen_color8(span->palette[index], r, g, b, a, add, &screen_colors[index].color, \
-				&screen_colors[index].covers, &screen_colors[index].darken); \
+				&screen_colors[index].covers, &screen_colors[index].darken, &screen_colors[index].half); \
 			if (alpha_test && !index) \
 				screen_colors[index].covers = 0; \
 		} \
@@ -809,13 +817,14 @@ static void span8_screen(struct span *span, int textured)
 #define ROW_TEXEL texels[((unsigned long)u >> 16) & width_mask]
 #define ANY_TEXEL texels[((((unsigned long)v >> 16) & height_mask) << width_shift) | (((unsigned long)u >> 16) & width_mask)]
 #define ADDED add[screen_colors[index].color * 256 + r_color_map[screen_colors[index].darken][pixels[x]]]
+#define PUT (screen_colors[index].half ? blend[screen_colors[index].color * 256 + pixels[x]] : screen_colors[index].color)
 		if (!dv)
 		{
 			texels += (((unsigned long)v >> 16) & height_mask) << width_shift;
 			if (add)
 				SCREEN_KEPT(ROW_TEXEL, ADDED)
 			else
-				SCREEN_KEPT(ROW_TEXEL, screen_colors[index].color)
+				SCREEN_KEPT(ROW_TEXEL, PUT)
 		}
 		else if (add)
 		{
@@ -823,12 +832,13 @@ static void span8_screen(struct span *span, int textured)
 		}
 		else
 		{
-			SCREEN_KEPT(ANY_TEXEL, screen_colors[index].color)
+			SCREEN_KEPT(ANY_TEXEL, PUT)
 		}
 #undef SCREEN_KEPT
 #undef ROW_TEXEL
 #undef ANY_TEXEL
 #undef ADDED
+#undef PUT
 		return;
 	}
 	for (int x = span->x0; x < span->x1; x++)
@@ -849,15 +859,17 @@ static void span8_screen(struct span *span, int textured)
 		blue = ((texel & 0xFF) * (unsigned long)(b >> 16)) >> 8;
 		if (add)
 		{
-			unsigned char color, covers, darken;
+			unsigned char color, covers, darken, half;
 
-			screen_color8(texel, r, g, b, a, add, &color, &covers, &darken);
+			screen_color8(texel, r, g, b, a, add, &color, &covers, &darken, &half);
 			if (covers)
 				pixels[x] = add[color * 256 + r_color_map[darken][pixels[x]]];
 		}
-		else if (screen_blend == _r_screen_opaque || alpha >= 128)
+		else if (screen_blend == _r_screen_opaque || alpha >= 64)
 		{
-			pixels[x] = r_palette_nearest((red << 16) | (green << 8) | blue);
+			unsigned char color = r_palette_nearest((red << 16) | (green << 8) | blue);
+
+			pixels[x] = screen_blend != _r_screen_opaque && alpha < 192 ? blend[color * 256 + pixels[x]] : color;
 		}
 	next:
 		u += du;
